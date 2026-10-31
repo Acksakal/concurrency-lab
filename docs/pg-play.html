@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Parallel Query Play</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--ink:#1b1f24;--mute:#5f6873;--line:#dde1e6;--accent:#6250d6;--good:#1f9d55;--bad:#d64545;--hl:#fff3c4;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--line:#2d3238;--accent:#9085e9;--good:#4cc38a;--bad:#ff6b6b;--hl:#3b3420;}}
+:root[data-theme="dark"]{--bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--line:#2d3238;--accent:#9085e9;--good:#4cc38a;--bad:#ff6b6b;--hl:#3b3420;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 2px} h2{font-size:16px;margin:0 0 6px}
+a{color:#2a78d6}
+.muted{color:var(--mute)} .small{font-size:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:14px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* stage */
+.stage{position:relative;width:100%;aspect-ratio:16/9;background:#0b0e13;border-radius:10px;overflow:hidden;border:1px solid #2d3238}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+.ov{position:absolute;inset:0;pointer-events:none}
+.lb{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;font:600 12px/1.2 "Segoe UI",system-ui,sans-serif;color:#e6e8eb;background:rgba(11,14,19,.78);border:1px solid #3a4250;border-radius:5px;padding:1px 6px;pointer-events:auto;transition:opacity .25s}
+.lb small{display:block;font-weight:400;font-size:10.5px;color:#aab3bf}
+.lb.zone{transform:none;background:transparent;border:none;color:#8b95a3;font-weight:600;font-size:11.5px;padding:0}
+.lb.role{background:#6250d6;border-color:#9085e9;color:#fff;font-size:11px}
+.lb.leader{background:#b7791f;border-color:#e0a63a;color:#fff;font-size:11px}
+.lb.red{background:#a12f2f;border-color:#ff6b6b;color:#fff}
+.lb.thing{background:#1d2633;border-color:#46546a;font-weight:400;font-size:11px}
+.lb .term{border-bottom:1px dotted #aab3bf;cursor:help}
+.sub{min-height:78px;margin-top:10px;font-size:16px;line-height:1.5}
+.sub .src{display:block;font-size:12px;margin-top:4px}
+.chapters{display:flex;gap:4px;margin-top:10px}
+.chapters button{flex:1;min-width:0;border:1px solid var(--line);background:var(--panel);color:var(--mute);border-radius:6px;padding:4px 2px;font:11.5px "Segoe UI",system-ui,sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
+.chapters button.on{color:var(--ink);border-color:var(--accent);font-weight:600}
+.chapters button .pg{position:absolute;left:0;bottom:0;height:3px;background:var(--accent)}
+input[type=range]{accent-color:var(--accent)}
+#scrub{flex:1;min-width:160px}
+/* cast */
+.cast{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.actor{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start}
+.actor canvas{width:40px;height:64px;image-rendering:pixelated;background:#0b0e13;border-radius:5px}
+.actor b{display:block}
+.tag{font-size:11px;font-weight:600;border-radius:999px;padding:0 8px;border:1px solid;display:inline-block;margin-top:3px}
+.tag.off{color:var(--good);border-color:var(--good)} .tag.not{color:var(--mute);border-color:var(--line)}
+.term{border-bottom:1px dotted var(--mute);cursor:help}
+.tcard{position:fixed;z-index:30;max-width:360px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;box-shadow:0 6px 20px rgba(0,0,0,.25);display:none}
+.tcard h5{margin:0 0 4px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tcard .lab{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin-top:6px}
+.transcript ol{margin:6px 0 0;padding-left:20px}
+.transcript li{margin:3px 0;cursor:pointer}
+.transcript li:hover{color:var(--accent)}
+.transcript h4{margin:10px 0 2px;font-size:13px}
+@media (max-width:760px){.lb{font-size:10px;padding:0 4px}.lb small{display:none}.sub{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between">
+    <div><h1>The parallel query play</h1>
+    <p class="muted" style="margin:0">PostgreSQL's processes as actors: from server start, to a client connecting, to a parallel query and its bottleneck.</p></div>
+  </div>
+
+  <div class="panel">
+    <div class="stage" id="stage"><canvas id="cv" width="320" height="180"></canvas><div class="ov" id="ov"></div></div>
+    <div class="chapters" id="chapters"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn pri" id="play">▶ Play</button>
+      <button class="btn" id="prev" title="Previous scene">⏮</button>
+      <button class="btn" id="next" title="Next scene">⏭</button>
+      <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Position in the play">
+      <span class="small muted" id="clock">0:00</span>
+      <span class="small muted" style="margin-left:6px">speed</span>
+      <button class="btn on" data-sp="1">1×</button><button class="btn" data-sp="0.5">0.5×</button><button class="btn" data-sp="1.5">1.5×</button><button class="btn" data-sp="2">2×</button>
+    </div>
+    <div class="sub" id="sub"></div>
+    <p class="small muted" style="margin:6px 0 0">Hover or tap any dotted name, on the stage or below, for its PostgreSQL definition and English origin. Space = play/pause, ← / → = previous / next scene.</p>
+  </div>
+
+  <div class="panel">
+    <h2>What's real and what's staging</h2>
+    <ul class="small" style="margin:0;padding-left:18px">
+      <li><b>Real (from the docs):</b> who the processes are, who starts whom, the order of events, what each stage does, and the conditions under which workers become blocked.</li>
+      <li><b>Staging, to make it visible:</b> processes drawn as people. Distances and speeds. A table of 24 blocks (real tables have thousands). Each blue dot is one result row in scene 5. In scene 7 each dot stands for a group of rows, because drawing every row would be unreadable.</li>
+      <li><b>Source-code detail, not in the user docs:</b> the per-worker "tuple queues" in shared memory that carry rows to the leader. The user docs only say workers can become blocked when the leader isn't reading tuples fast enough.</li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <h2>The cast</h2>
+    <div class="cast" id="cast"></div>
+  </div>
+
+  <div class="panel transcript">
+    <h2>Full script</h2>
+    <p class="small muted" style="margin:0">Every subtitle, with its source. Click a line to jump there.</p>
+    <div id="script"></div>
+  </div>
+</div>
+<div class="tcard" id="tcard" role="tooltip"></div>
+
+<script>
+"use strict";
+/* =================== SOURCES & GLOSSARY =================== */
+var SRC={
+  gl:{t:'Glossary',u:'https://www.postgresql.org/docs/current/glossary.html'},
+  conn:{t:'How Connections Are Established',u:'https://www.postgresql.org/docs/current/connect-estab.html'},
+  path:{t:'The Path of a Query',u:'https://www.postgresql.org/docs/current/query-path.html'},
+  auth:{t:'Client Authentication',u:'https://www.postgresql.org/docs/current/client-authentication.html'},
+  howpq:{t:'How Parallel Query Works',u:'https://www.postgresql.org/docs/current/how-parallel-query-works.html'},
+  plans:{t:'Parallel Plans',u:'https://www.postgresql.org/docs/current/parallel-plans.html'},
+  when:{t:'When Can Parallel Query Be Used?',u:'https://www.postgresql.org/docs/current/when-can-parallel-query-be-used.html'},
+  bgw:{t:'Background Worker Processes',u:'https://www.postgresql.org/docs/current/bgworker.html'},
+  cost:{t:'Query Planning: cost constants',u:'https://www.postgresql.org/docs/current/runtime-config-query.html'},
+  res:{t:'Resource Consumption: parallel_leader_participation',u:'https://www.postgresql.org/docs/current/runtime-config-resource.html'},
+  tq:{t:'source code: tqueue.c (not user docs)',u:'https://doxygen.postgresql.org/tqueue_8c_source.html'}
+};
+var GL={
+ instance:{w:'instance',pg:1,d:'Glossary: "A group of backend and auxiliary processes that communicate using a common shared memory area. One postmaster process manages the instance."',o:'Latin <i>instantia</i>, "presence, being at hand", from <i>instare</i>, "to stand upon". In computing: one running occurrence of something.'},
+ postmaster:{w:'postmaster',pg:1,d:'Glossary: "The very first process of an instance. It starts and manages the auxiliary processes and creates backend processes on demand." It "listens at a specified TCP/IP port for incoming connections."',o:'English: the official in charge of a post office. <i>Post</i> comes from Italian <i>posta</i>, a relay station for couriers, from Latin <i>posita</i>, "placed".'},
+ aux:{w:'auxiliary process',pg:1,d:'Glossary: "A process within an instance that is in charge of some specific background task for the instance", for example the checkpointer, background writer, WAL writer and autovacuum launcher.',o:'Latin <i>auxiliarius</i>, from <i>auxilium</i>, "help, support".'},
+ checkpointer:{w:'checkpointer',pg:1,d:'Glossary: "An auxiliary process that is responsible for executing checkpoints". A checkpoint guarantees that data files contain every change made in shared memory before it.',o:'<i>Check</i>, from Old French <i>eschec</i> (the chess word, from Persian <i>shāh</i>, "king"), meaning to stop and verify, plus <i>point</i>, Latin <i>punctum</i>.'},
+ bgwriter:{w:'background writer',pg:1,d:'Glossary: "An auxiliary process that writes dirty data pages from shared memory to the file system. It wakes up periodically, but works only for a short period…"',o:'<i>Write</i>: Old English <i>wrītan</i>, "to scratch, to carve": the earliest writing was carving.'},
+ walwriter:{w:'WAL writer',pg:1,d:'Glossary: "An auxiliary process that writes WAL records from shared memory to WAL files." WAL = write-ahead log, "the journal that keeps track of the changes in the database cluster".',o:'<i>Log</i>: a ship\'s log was a piece of wood thrown overboard to measure speed, and the book recording the readings took its name.'},
+ autovac:{w:'autovacuum launcher',pg:1,d:'Glossary: the auxiliary process "that coordinates the work and is always present (unless autovacuum is disabled)". Its autovacuum workers remove outdated tuple versions.',o:'<i>Auto</i>: Greek <i>autos</i>, "self". <i>Vacuum</i>: Latin <i>vacuus</i>, "empty". <i>Launch</i>: Old French <i>lancier</i>, "to hurl (a lance)".'},
+ shmem:{w:'shared memory',pg:1,d:'Glossary: "RAM which is used by the processes common to an instance." "The largest part of shared memory is known as shared buffers and is used to mirror part of data files, organized into pages."',o:'<i>Share</i>: Old English <i>scearu</i>, "a cutting, a division". <i>Memory</i>: Latin <i>memoria</i>, from <i>memor</i>, "mindful".'},
+ buffers:{w:'shared buffers',pg:1,d:'The largest part of shared memory: copies of data-file pages, so processes don\'t have to read the disk every time. A page read into shared buffers stays there for others to use until it is replaced.',o:'<i>Buffer</i>: from <i>buff</i>, "to strike softly". A buffer first absorbed shocks, then came to mean "temporary storage between two parts".'},
+ datafiles:{w:'data files (table orders)',pg:1,d:'Tables live on disk in data files inside the data directory, stored as fixed-size data pages (blocks), 8 kB by default. Glossary: data pages "can be read to shared buffers".',o:'<i>Data</i>: Latin, plural of <i>datum</i>, "something given". <i>File</i>: French <i>fil</i>, "thread": papers were once kept strung on a thread.'},
+ block:{w:'block (data page)',pg:1,d:'Glossary (data page): "The basic structure used to store relation data. All pages are of the same size." The parallel-scan docs call them the table\'s "blocks".',o:'<i>Block</i>: Middle Dutch <i>blok</i>, "tree trunk". <i>Page</i>: Latin <i>pagina</i>, "a written leaf".'},
+ port:{w:'port 5432',pg:1,d:'The TCP/IP port the postmaster listens on, 5432 by default. "Many instances can run on the same server as long as their TCP ports do not conflict."',o:'Latin <i>porta</i>, "gate", and <i>portus</i>, "harbour": a numbered gate where connections come in.'},
+ app:{w:'your app → client',pg:1,d:'Glossary (client): "Any process, possibly remote, that establishes a session by connecting to an instance". It can be "any program that understands the PostgreSQL protocol", for example via libpq or the JDBC driver.',o:'<i>Client</i>: Latin <i>cliens</i>, "follower, dependant" of a powerful patron in ancient Rome.'},
+ backend:{w:'backend process',pg:1,d:'Glossary: "Process of an instance which acts on behalf of a client session and handles its requests." The postmaster "spawns a new backend process every time a connection is requested".',o:'<i>Back</i> + <i>end</i>: the part away from the user, as opposed to the <i>front end</i>.'},
+ spawn:{w:'spawn',pg:1,d:'The docs\' word for the postmaster creating a new process: "it spawns a new backend process". On Unix-like systems this is done by forking.',o:'Old French <i>espandre</i>, "to spread out". Originally said of fish laying eggs; later, to produce offspring.'},
+ auth:{w:'client authentication',pg:1,d:'The server checks who the client is and whether it may use the database user name it asked for. The rules live in <code>pg_hba.conf</code> (hba = host-based authentication) in the data directory.',o:'Greek <i>authentikos</i>, "genuine, original", from <i>authentēs</i>, "one who acts with his own authority".'},
+ connection:{w:'connection',pg:1,d:'Glossary: "An established line of communication between a client process and a backend process, usually over a network, supporting a session."',o:'Latin <i>connectere</i>, "to bind together": <i>con</i> "together" + <i>nectere</i> "to tie".'},
+ session:{w:'session',pg:1,d:'Glossary: "A state that allows a client and a backend to interact, communicating over a connection."',o:'Latin <i>sessio</i>, "a sitting", from <i>sedere</i>, "to sit".'},
+ parser:{w:'parser stage',pg:1,d:'"The parser stage checks the query transmitted by the application program for correct syntax and creates a query tree." It runs inside the backend; it is not a separate process.',o:'Latin <i>pars orationis</i>, "part of speech": to <i>parse</i> a sentence was to name the grammatical part of each word.'},
+ rewriter:{w:'rewrite system',pg:1,d:'"The rewrite system takes the query tree created by the parser stage and looks for any rules … to apply to the query tree", for example to expand views. It also runs inside the backend.',o:'<i>Re-</i> "again" + Old English <i>wrītan</i>, "to carve, to write".'},
+ planner:{w:'planner/optimizer',pg:1,d:'Creates possible paths to the result, estimates "the cost for the execution of each path" and chooses the cheapest. It runs inside the same backend process.',o:'French <i>plan</i>, Latin <i>planum</i>, "flat surface": a drawing on a flat sheet. <i>Optimize</i>: Latin <i>optimus</i>, "best".'},
+ executor:{w:'executor',pg:1,d:'"The executor recursively steps through the plan tree and retrieves rows in the way represented by the plan." When it reaches a Gather node, the parallel part starts.',o:'Latin <i>exsequi</i>, "to follow out, to carry out".'},
+ leader:{w:'leader',pg:1,d:'The backend running the Gather node. It "will also execute that portion of the plan, but it has an additional responsibility: it must also read all of the tuples generated by the workers."',o:'Old English <i>lǣdan</i>, "to guide, to make go", plus <i>-er</i>, "one who".'},
+ worker:{w:'background worker (parallel worker)',pg:1,d:'"Every background worker process that is successfully started for a given parallel query will execute the parallel portion of the plan." Background workers "are attached to PostgreSQL\'s shared memory area".',o:'Old English <i>weorc</i>, "work, deed", plus <i>-er</i>.'},
+ gather:{w:'Gather node',pg:1,d:'A node in the query plan, not a process. The process "implementing the user\'s session" runs it; when it is reached, that process requests the workers. Gather "reads tuples from the workers in whatever order is convenient".',o:'Old English <i>gaderian</i>, "to bring together".'},
+ tqueue:{w:'tuple queue',pg:0,d:'Not a user-docs term: in the source code (tqueue.c) each worker sends its tuples to the leader through a message queue in shared memory. The user docs only say workers can "become blocked because the leader is not reading tuples fast enough".',o:'<i>Tuple</i>: from <i>quintuple, sextuple</i>, Latin <i>-plus</i>, "-fold". <i>Queue</i>: French for "tail", Latin <i>cauda</i>.'},
+ tuple:{w:'tuple',pg:1,d:'Glossary: "A collection of attributes in a fixed order." When the order comes from a table, it\'s "often called a row".',o:'Abstracted from <i>quintuple, sextuple…</i> (Latin <i>-plus</i>, "-fold"): an ordered list of things.'},
+ pseqscan:{w:'Parallel Seq Scan',pg:1,d:'"The table\'s blocks will be divided into ranges and shared among the cooperating processes. Each worker process will complete the scanning of its given range of blocks before requesting an additional range."',o:'<i>Parallel</i>: Greek <i>parallēlos</i>, "beside one another". <i>Scan</i>: Latin <i>scandere</i>, "to climb", first used in English for the rhythm of verse.'},
+ blocked:{w:'blocked',pg:1,d:'From the docs for <code>parallel_leader_participation</code>: "workers will become blocked because the leader is not reading tuples fast enough". A blocked worker can\'t continue until the leader reads its tuples.',o:'From <i>block</i> (Middle Dutch <i>blok</i>, "log"): a log across the road stops traffic.'}
+};
+var tcard=document.getElementById('tcard'), pinned=null;
+function showTerm(el){
+  var g=GL[el.getAttribute('data-t')]; if(!g) return;
+  tcard.innerHTML='<h5>'+g.w+' <span class="tag '+(g.pg?'off':'not')+'">'+(g.pg?'official PostgreSQL term':'source-code term, not user docs')+'</span></h5><div class="lab">In PostgreSQL</div><div>'+g.d+'</div><div class="lab">English origin</div><div>'+g.o+'</div>';
+  tcard.style.display='block';
+  var r=el.getBoundingClientRect(), w=tcard.offsetWidth, h=tcard.offsetHeight;
+  var x=Math.min(Math.max(8,r.left), innerWidth-w-8), y=r.bottom+8; if(y+h>innerHeight-8) y=r.top-h-8;
+  tcard.style.left=x+'px'; tcard.style.top=Math.max(8,y)+'px';
+}
+function hideTerm(){ tcard.style.display='none'; }
+document.addEventListener('mouseover',function(e){ var t=e.target.closest&&e.target.closest('.term'); if(t) showTerm(t); else if(!pinned&&!(e.target.closest&&e.target.closest('#tcard'))) hideTerm(); });
+document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('.term'); if(t){ pinned=t; showTerm(t); } else if(!(e.target.closest&&e.target.closest('#tcard'))){ pinned=null; hideTerm(); } });
+document.addEventListener('focusin',function(e){ if(e.target.classList&&e.target.classList.contains('term')) showTerm(e.target); });
+function T(k,txt){ return '<span class="term" data-t="'+k+'" tabindex="0">'+txt+'</span>'; }
+
+/* =================== SPRITES =================== */
+var cv=document.getElementById('cv'), cx=cv.getContext('2d');
+var C={skin:'#f1c27d',pm:'#8e6bd6',pmhat:'#4b347f',be:'#3a7bd5',w1:'#eb6834',w2:'#1baf7a',hard:'#f2c94c',app:'#7fbf3f',aux:['#7d8796','#8f8a7c','#6f8f9a','#9a7f8f'],
+  wall:'#3b4250',floor:'#141a22',smem:'#16263a',smemB:'#2c4a6e',disk:'#2a2420',diskB:'#4a3e33',blk:'#6b5b4b',cached:'#4f9be8',dot:'#7cc4ff',red:'#ff5a5a',gold:'#f2c94c',paper:'#e9e2c8',desk:'#6b4a2e'};
+function px(x,y,w,h,c,a){ cx.globalAlpha=a==null?1:a; cx.fillStyle=c; cx.fillRect(Math.round(x),Math.round(y),w,h); }
+function person(x,y,o){ // 10x16 sprite, top-left x,y
+  var a=o.alpha==null?1:o.alpha; if(a<=0) return; x=Math.round(x); y=Math.round(y);
+  var bob=o.bob?((Math.floor(o.bob)%2)?1:0):0; y-=bob;
+  var body=o.red?C.red:o.body;
+  if(o.hat==='cap'){ px(x+2,y,6,2,o.hatC||C.pmhat,a); px(x+1,y+2,8,1,o.hatC||C.pmhat,a); }
+  else if(o.hat==='hard'){ px(x+3,y,4,1,C.hard,a); px(x+2,y+1,6,1,C.hard,a); px(x+1,y+2,8,1,C.hard,a); }
+  else { px(x+3,y+1,4,1,'#3a2a1a',a); px(x+2,y+2,1,2,'#3a2a1a',a); px(x+7,y+2,1,2,'#3a2a1a',a); }
+  px(x+3,y+2,4,4,C.skin,a); px(x+4,y+4,1,1,'#222',a); px(x+6,y+4,1,1,'#222',a);
+  px(x+2,y+6,6,5,body,a); px(x+1,y+7,1,3,body,a); px(x+8,y+7,1,3,body,a);
+  if(o.tie) px(x+5,y+6,1,4,'#d64545',a);
+  var step=o.walk?(Math.floor(o.walk*6)%2):0;
+  px(x+3,y+11,2,4-(step?1:0),'#2b3240',a); px(x+5,y+11,2,4-(step?0:1),'#2b3240',a);
+  px(x+2+(step?0:0),y+15-(step?1:0),3,1,'#111',a); px(x+5,y+15-(step?0:1),3,1,'#111',a);
+  if(o.star){ px(x+4,y-4,2,1,C.gold,a); px(x+3,y-3,4,1,C.gold,a); px(x+4,y-2,2,1,C.gold,a); }
+  if(o.bang){ px(x+4,y-6,2,3,C.red,a); px(x+4,y-2,2,1,C.red,a); }
+}
+function laptop(x,y,a){ px(x,y,10,6,'#c9ced6',a); px(x+1,y+1,8,4,'#2a78d6',a); px(x-1,y+6,12,1,'#8b95a3',a); }
+function envelope(x,y){ px(x,y,6,4,C.paper); px(x+1,y+1,1,1,'#8b7d55'); px(x+2,y+2,2,1,'#8b7d55'); px(x+4,y+1,1,1,'#8b7d55'); }
+function scroll(x,y){ px(x,y,7,5,C.paper); px(x+1,y+1,5,1,'#8b7d55'); px(x+1,y+3,4,1,'#8b7d55'); }
+function key(x,y){ px(x,y,3,3,C.gold); px(x+1,y+1,1,1,'#0b0e13'); px(x+3,y+1,4,1,C.gold); px(x+5,y+2,1,1,C.gold); }
+function dot(x,y,c){ px(x-1,y-1,3,3,c||C.dot); }
+function card(x,y,hl){ px(x,y,14,10,C.paper); px(x+6,y+2,2,1,'#555'); px(x+3,y+4,8,1,'#555'); px(x+3,y+5,1,2,'#555'); px(x+10,y+5,1,2,'#555'); if(hl){ px(x-1,y-1,16,1,C.gold); px(x-1,y+10,16,1,C.gold); px(x-1,y,1,10,C.gold); px(x+14,y,1,10,C.gold);} }
+function minicard(x,y){ px(x,y,8,6,C.paper); px(x+1,y+1,6,1,'#555'); px(x+1,y+3,4,1,'#555'); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function ease(t){ t=Math.max(0,Math.min(1,t)); return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
+function along(pts,t){ // polyline
+  t=Math.max(0,Math.min(1,t)); var L=[],tot=0,i; for(i=1;i<pts.length;i++){ var d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); L.push(d); tot+=d; }
+  var s=t*tot; for(i=0;i<L.length;i++){ if(s<=L[i]||i===L.length-1){ var f=L[i]?s/L[i]:1; return [lerp(pts[i][0],pts[i+1][0],Math.min(1,f)),lerp(pts[i][1],pts[i+1][1],Math.min(1,f))]; } s-=L[i]; }
+  return pts[pts.length-1];
+}
+
+/* =================== GEOMETRY =================== */
+var P={app:[26,70],laptop:[38,80],door:[75,80],pm:[82,70],desk:[126,86],be:[132,68],tray:[152,84],
+  aux:[[150,18],[186,18],[224,18],[268,18]],w1:[198,84],w2:[246,84],
+  smem:[96,104,220,28],disk:[96,138,220,38]};
+var NB=24;
+function blockXY(b){ return [110+(b%12)*16, 146+Math.floor(b/12)*14]; }
+function bufXY(b){ return [110+b*8.2, 118]; }
+function trayXY(k,i){ return [P.tray[0]+2+i*5, P.tray[1]+2+(k-1)*6]; }
+var LINE=[[36,78],[75,80],[137,78]];          // client ↔ backend connection
+var TOCLIENT=[[139,78],[75,80],[36,78]];
+
+/* =================== SCAN SIMULATION =================== */
+function simulate(o){
+  var S={t:0,procs:[{id:'L',blk:-1,prog:0,range:[],busy:0,blocked:false,done:false},{id:'W1',blk:-1,prog:0,range:[],blocked:false,done:false,bt:0,at:0},{id:'W2',blk:-1,prog:0,range:[],blocked:false,done:false,bt:0,at:0}],
+    q:[0,0,0],done:new Array(NB).fill(-1),cached:o.cached.slice(),nextRange:0,flights:[],sent:0,rr:1,fin:false};
+  var snaps=[]; var BT=6, RS=2;
+  function snap(){ snaps.push(JSON.parse(JSON.stringify({procs:S.procs,q:S.q,done:S.done,cached:S.cached,flights:S.flights,sent:S.sent,fin:S.fin}))); }
+  function take(p,k){ if(p.range.length===0){ if(S.nextRange*RS>=NB) return false; for(var j=0;j<RS;j++) p.range.push(S.nextRange*RS+j); S.nextRange++; }
+    p.blk=p.range.shift(); p.prog=0; S.cached[p.blk]=true; return true; }
+  snap();
+  for(var t=0;t<o.max;t++){
+    S.t=t;
+    for(var k=1;k<=2;k++){ var p=S.procs[k]; if(p.done||t<o.start) continue;
+      if(p.blk<0 && !take(p,k)){ p.done=true; p.blocked=false; continue; }
+      var np=p.prog+1, em=o.emits(p.blk).indexOf(np)>=0;
+      p.at++;
+      if(em && S.q[k]>=o.qcap){ p.blocked=true; p.bt++; continue; }
+      p.blocked=false; p.prog=np; if(em) S.q[k]++;
+      if(p.prog>=BT){ S.done[p.blk]=k; p.blk=-1; }
+    }
+    var L=S.procs[0];
+    if(L.busy>0) L.busy--;
+    else if(S.q[1]+S.q[2]>0){ var pick=S.q[S.rr]>0?S.rr:(S.rr===1?2:1); S.q[pick]--; S.rr=pick===1?2:1; L.busy=1; S.flights.push({t:t,from:pick}); S.sent++; L.reading=true; }
+    else if(!L.done){ L.reading=false;
+      if(L.blk<0 && !take(L,0)) L.done=true;
+      else { L.prog++; if(o.emits(L.blk).indexOf(L.prog)>=0){ S.flights.push({t:t,from:0}); S.sent++; L.busy=1; }
+        if(L.prog>=BT){ S.done[L.blk]=0; L.blk=-1; } }
+    }
+    if(L.busy===0 && S.q[1]+S.q[2]===0) L.reading=false;
+    var allDone=S.done.every(function(d){return d>=0;});
+    if(allDone && S.q[1]+S.q[2]===0 && L.busy===0){ S.procs.forEach(function(p){p.done=true;p.blk=-1;p.blocked=false;}); S.fin=true; snap(); break; }
+    snap();
+  }
+  return snaps;
+}
+var MATCH=[2,7,11,15,19,22];
+var SIM_FIND=simulate({start:0,max:400,qcap:4,cached:new Array(NB).fill(false),emits:function(b){return MATCH.indexOf(b)>=0?[3]:[];}});
+var SIM_ALL=simulate({start:0,max:400,qcap:4,cached:new Array(NB).fill(true),emits:function(){return [1,2,3,4,5,6];}});
+var TICK=0.3;
+
+/* =================== SCRIPT =================== */
+var SC=[
+ {title:'1 · The instance starts',dur:16,subs:[
+  [0,'A server machine. Nothing is running yet. The table <b>orders</b> already exists as '+T('datafiles','data files')+' on disk, stored in '+T('block','blocks')+' (pages).','gl'],
+  [2.5,'You start PostgreSQL. The first process to run is the '+T('postmaster','postmaster'),'gl','"the very first process of an instance"'],
+  [5,'A '+T('shmem','shared memory')+' area is set up: "RAM which is used by the processes common to an instance". Its largest part, the '+T('buffers','shared buffers'),'gl','"is used to mirror part of data files"'],
+  [7.5,'The postmaster "starts and manages the '+T('aux','auxiliary processes')+'". On a running primary server these include the '+T('checkpointer','checkpointer')+', '+T('bgwriter','background writer')+', '+T('walwriter','WAL writer')+' and '+T('autovac','autovacuum launcher')+'. Others (logger, WAL archiver, WAL receiver) run only if enabled or on a replica.','gl'],
+  [12.5,'The postmaster now "listens at a specified TCP/IP port for incoming connections" ('+T('port','5432')+' by default). These processes plus the shared memory are the '+T('instance','instance')+'.','conn']]},
+ {title:'2 · A client connects',dur:16,subs:[
+  [0,'Your web app starts. To PostgreSQL it is just a program that speaks the PostgreSQL protocol, for example through libpq or a JDBC driver.','conn'],
+  [3,'The app sends a connection request to port 5432, naming the database user it wants to connect as.','auth'],
+  [6,'"Whenever it detects a request for a connection, it '+T('spawn','spawns')+' a new '+T('backend','backend process')+'." One client, one backend: PostgreSQL\'s "process per user" model.','conn'],
+  [9.5,T('auth','Client authentication')+', done by the new backend so the postmaster never waits on a slow client: the rules in <code>pg_hba.conf</code> decide whether this client may connect as that user, and how it must prove who it is (for example with a password).','auth'],
+  [12.5,'The '+T('connection','connection')+' is established and a '+T('session','session')+' begins. Your app is now a '+T('app','client')+'. The postmaster plays no part in this session\'s queries; it goes back to waiting at the door.','gl']]},
+ {title:'3 · The query arrives',dur:18,subs:[
+  [0,'The client sends <code>SELECT * FROM orders WHERE note LIKE \'%refund%\';</code>. "The query is transmitted using plain text, i.e., there is no parsing done in the client."','conn'],
+  [4,'Everything next happens <b>inside this one backend process</b>, which does each stage in turn. The '+T('parser','parser')+' checks the syntax and builds a query tree.','path'],
+  [7,'The '+T('rewriter','rewrite system')+' applies any rules, for example expanding views. There\'s nothing to change here.','path'],
+  [9.5,'The '+T('planner','planner/optimizer')+' builds possible plans, estimates the cost of each, and keeps the cheapest. No ordinary index can help with <code>\'%refund%\'</code>, so every row must be read.','path'],
+  [13.5,'It chooses '+T('gather','Gather')+' with Workers Planned: 2 (the default limit, <code>max_parallel_workers_per_gather</code> = 2). Few rows will match, so few will have to be handed back to the leader.','howpq']]},
+ {title:'4 · Calling for workers',dur:14,subs:[
+  [0,'The '+T('executor','executor')+' runs the plan. "When the Gather node is reached", the process running this session requests the workers. It is now the '+T('leader','leader')+'.','howpq'],
+  [3,'The leader asks for 2 background worker processes. The request goes through the postmaster: dynamic background workers are registered by "a regular backend" and "started by the postmaster".','bgw'],
+  [6,'The postmaster starts two '+T('worker','workers')+'. Background workers "are attached to PostgreSQL\'s shared memory area", so they can see the same shared buffers as the leader.','bgw'],
+  [10,'If no workers were available (the limits are <code>max_worker_processes</code> and <code>max_parallel_workers</code>), the leader would run the part below Gather "entirely by itself". Here both start.','when']]},
+ {title:'5 · Parallel Seq Scan',dur:22,subs:[
+  [0,T('pseqscan','Parallel Seq Scan')+': the table\'s blocks "will be divided into ranges and shared among the cooperating processes". Each process scans its range, then asks for the next one.','plans'],
+  [4,'To read a block, a process looks in the shared buffers. If the page isn\'t there yet, it is read from the data file into shared buffers (the blue squares), where every process can use it.','gl'],
+  [8.5,'Every row is checked against the filter. The rare matching rows (blue dots) go from each worker to the leader through its '+T('tqueue','tuple queue')+'. That queue is a source-code detail; the user docs don\'t describe it.','tq'],
+  [13,'Few tuples arrive, so the leader is free most of the time and scans blocks too: "the leader will often behave very much like an additional worker".','howpq'],
+  [17.5,'The leader runs Gather: it "reads tuples from the workers in whatever order is convenient" and sends each result row to the client "over the established connection".','conn']]},
+ {title:'6 · Results & clean-up',dur:12,subs:[
+  [0,'All blocks are scanned. The workers have finished their part of the plan, so they exit. Every parallel query launches its own workers; that launch is what <code>parallel_setup_cost</code> estimates.','cost'],
+  [5,'The leader sends the last rows and tells the client the query is complete. It is no longer a leader: it\'s an ordinary backend again, waiting for the next query in the same session.','conn'],
+  [9,'Notice that the pages read are still in shared buffers. The next query that needs them may not have to read the disk.','gl']]},
+ {title:'7 · The other case: every row',dur:24,subs:[
+  [0,'Now the client sends <code>SELECT * FROM orders;</code>. The planner would usually refuse a parallel plan here: moving a row from a worker is estimated at 10× the cost of processing it (<code>parallel_tuple_cost</code> 0.1 vs <code>cpu_tuple_cost</code> 0.01).','cost'],
+  [5,'Suppose a parallel plan is used anyway (lowering <code>parallel_setup_cost</code> and <code>parallel_tuple_cost</code> makes the planner more willing). The leader requests workers, and the postmaster starts two new ones.','bgw'],
+  [9,'Now every row must go through the leader (here, each dot = a group of rows). The leader spends almost all its time reading tuples and sending them on: "almost entirely occupied with reading the tuples generated by the workers".','howpq'],
+  [14,'The queues fill up and the workers stop: "workers will become '+T('blocked','blocked')+' because the leader is not reading tuples fast enough." Extra workers can\'t make this query faster.','res'],
+  [19.5,'That\'s the funnel from the main page. The leader is the one way out, and it moves rows at its own pace however many workers there are.','howpq']]},
+ {title:'8 · Disconnect',dur:11,subs:[
+  [0,'(Skipping ahead.) That query eventually finishes, and its workers exit too.','howpq'],
+  [3,'The app closes its connection. Its backend existed only to serve this one client ("every client process connects to exactly one backend process"), so it exits.','conn'],
+  [7,'The instance keeps running: the postmaster waits at the door for the next connection, and the auxiliary processes carry on with their background work.','gl']]}
+];
+var START=[],TOTAL=0; SC.forEach(function(s){ START.push(TOTAL); TOTAL+=s.dur; });
+
+/* =================== WORLD at (scene i, time u) =================== */
+function after(i,u,si,t){ return i>si||(i===si&&u>=t); }
+function prog(i,u,si,t0,t1){ if(i<si) return 0; if(i>si) return 1; return Math.max(0,Math.min(1,(u-t0)/(t1-t0))); }
+function simAt(snaps,uu){ var k=Math.max(0,Math.min(snaps.length-1,Math.floor(uu/TICK))); return {s:snaps[k],k:k,frac:(uu/TICK)-Math.floor(uu/TICK)}; }
+
+var labels={};
+function L(id,html,cls){ var e=labels[id]; if(!e){ e=document.createElement('div'); e.className='lb '+(cls||''); e.id='lb-'+id; document.getElementById('ov').appendChild(e); labels[id]=e; e._h=''; }
+  if(e._h!==html){ e.innerHTML=html; e._h=html; } if(cls!==undefined && e._c!==cls){ e.className='lb '+cls; e._c=cls; } return e; }
+function place(id,html,x,y,show,cls){ var e=L(id,html,cls); e.style.left=(x/320*100)+'%'; e.style.top=(y/180*100)+'%'; e.style.opacity=show?1:0; e.style.visibility=show?'visible':'hidden'; }
+
+function draw(Tg){
+  var i=0; while(i<SC.length-1 && Tg>=START[i+1]) i++; var u=Tg-START[i];
+  cx.clearRect(0,0,320,180); cx.globalAlpha=1;
+  // background: outside + building
+  px(0,0,320,180,'#0b0e13'); px(0,150,74,30,'#10151c');
+  var lit=prog(i,u,0,2.5,4); // instance alive
+  px(78,8,240,170,C.floor,0.4+0.6*lit);
+  // wall with door
+  var doorOpen=after(i,u,0,12.5);
+  px(74,8,4,62,C.wall); px(74,92,4,86,C.wall); px(74,8,244,2,C.wall); px(316,8,2,170,C.wall);
+  if(!doorOpen) px(74,70,4,22,'#6b4a2e'); else { px(74,70,1,22,'#6b4a2e'); px(77,70,1,22,'#6b4a2e'); }
+  // shared memory
+  var sm=prog(i,u,0,5,6.5);
+  if(sm>0){ px(P.smem[0],P.smem[1],P.smem[2],P.smem[3],C.smem,sm); px(P.smem[0],P.smem[1],P.smem[2],1,C.smemB,sm); px(P.smem[0],P.smem[1]+P.smem[3]-1,P.smem[2],1,C.smemB,sm); }
+  // disk + blocks
+  px(P.disk[0],P.disk[1],P.disk[2],P.disk[3],C.disk); px(P.disk[0],P.disk[1],P.disk[2],1,C.diskB);
+  // scan state
+  var st=null, simU=0, which=null;
+  if(i===4 && u>=1){ which=SIM_FIND; simU=u-1; }
+  else if(i===5){ which=SIM_FIND; simU=999; }
+  else if(i===6 && u>=9){ which=SIM_ALL; simU=u-9; }
+  if(which) st=simAt(which,simU);
+  var cached = (i>=6||(i===5)) ? new Array(NB).fill(true) : (st?st.s.cached:new Array(NB).fill(false));
+  if(i===4 && st) cached=st.s.cached;
+  var procColor=[C.be,C.w1,C.w2];
+  for(var b=0;b<NB;b++){ var xy=blockXY(b), d=st?st.s.done[b]:-1;
+    if(i===5 || i===7) d = (i===5)? SIM_FIND[SIM_FIND.length-1].done[b] : 1;
+    px(xy[0],xy[1],12,9,C.blk); px(xy[0]+1,xy[1]+2,10,1,'#55483b'); px(xy[0]+1,xy[1]+5,10,1,'#55483b');
+    if(d>=0 && (i===4||i===5||i===6)) { px(xy[0],xy[1],12,9,procColor[d],0.45); }
+    if(sm>0){ var bx=bufXY(b); px(bx[0],bx[1],6,6,cached[b]?C.cached:'#22344c',sm); }
+  }
+  // beams and current blocks
+  if(st){ st.s.procs.forEach(function(p,k){ if(p.blk>=0){ var xy=blockXY(p.blk); var c=procColor[k]; var scanningNow = k===0 ? !p.reading && !st.s.fin : !p.blocked;
+      px(xy[0]-1,xy[1]-1,14,1,c); px(xy[0]-1,xy[1]+9,14,1,c); px(xy[0]-1,xy[1],1,9,c); px(xy[0]+12,xy[1],1,9,c);
+      var from = k===0?[P.be[0]+5,P.be[1]+15]:(k===1?[P.w1[0]+5,P.w1[1]+15]:[P.w2[0]+5,P.w2[1]+15]);
+      if(scanningNow){ var bx=bufXY(p.blk); for(var s=0;s<12;s++){ var q=s/12; var X=lerp(from[0],bx[0]+3,q), Y=lerp(from[1],bx[1],q); px(X,Y,1,1,c,0.7);} px(bx[0]+3,bx[1]+6,1,xy[1]-bx[1]-6,c,0.5); }
+  } }); }
+  // desk, tray
+  var beHere=after(i,u,1,8.5)&&!after(i,u,7,5);
+  if(after(i,u,1,6) && !after(i,u,7,6)){ px(P.desk[0],P.desk[1],22,3,C.desk); px(P.desk[0]+2,P.desk[1]+3,2,5,C.desk); px(P.desk[0]+18,P.desk[1]+3,2,5,C.desk); }
+  var gatherOn = (after(i,u,3,0) && !after(i,u,5,5)) || (after(i,u,6,5) && i<7);
+  if(gatherOn){ px(P.tray[0],P.tray[1],24,14,'#2b3a4f'); px(P.tray[0],P.tray[1],24,1,'#5b6f8c');
+    for(var k=1;k<=2;k++) for(var j=0;j<4;j++){ var t=trayXY(k,j); px(t[0],t[1],4,4,'#1a2230'); if(st && j<st.s.q[k]) px(t[0],t[1],4,4,procColor[k]); } }
+  // plan card on desk
+  if(after(i,u,2,13.5) && !after(i,u,5,5)) minicard(P.desk[0]+14,P.desk[1]-6);
+  if(after(i,u,6,5) && i<7) minicard(P.desk[0]+14,P.desk[1]-6);
+  // thought bubble (planner)
+  var thinking = i===2 && u>=9.5 && u<13.5;
+  if(thinking){ px(145,64,1,1,'#fff'); px(148,60,2,2,'#fff'); card(152,46,u>12); card(178,46,false); }
+  // connection line
+  var connA = prog(i,u,1,12.5,14) * (1-prog(i,u,7,5,6));
+  if(connA>0){ var n=Math.floor(60*connA); for(var s=0;s<n;s++){ if(s%2) continue; var p=along(LINE,s/60); px(p[0],p[1],1,1,'#7cc4ff',0.8); } }
+
+  // ---------- people ----------
+  var labelsOn={};
+  // postmaster
+  if(lit>0){ var pmP=P.pm, pa=1; var t1=prog(i,u,0,2.5,4.5);
+    var pos=[lerp(150,P.pm[0],ease(t1)),lerp(50,P.pm[1],ease(t1))];
+    var walking=(i===0&&u>2.5&&u<4.5);
+    person(pos[0],pos[1],{body:C.pm,hat:'cap',walk:walking?u:0,alpha:Math.min(1,(u-2.5)*3+(i>0?9:0))});
+    place('pm',T('postmaster','postmaster')+'<small>supervisor, at the door</small>',pos[0]+5,pos[1]-2,true,'');
+  } else place('pm','',0,0,false);
+  // aux
+  var auxN=[['checkpointer','checkpointer'],['bgwriter','background writer'],['walwriter','WAL writer'],['autovac','autovacuum launcher']];
+  auxN.forEach(function(a,k){ var on=after(i,u,0,8+k*1.1); var al=i>0?1:Math.min(1,(u-(8+k*1.1))*3);
+    if(on){ person(P.aux[k][0],P.aux[k][1],{body:C.aux[k],alpha:al,bob:(i>0||u>12)?(Tg*1.2+k):0}); }
+    place('aux'+k,T(a[0],a[1]),P.aux[k][0]+5,P.aux[k][1]-1,on,'thing'); });
+  // app
+  if(i>=1){ var ap=prog(i,u,1,0,2.5); var axy=[lerp(-12,P.app[0],ease(ap)),P.app[1]];
+    person(axy[0],axy[1],{body:C.app,walk:(i===1&&u<2.5)?u:0}); laptop(P.laptop[0],P.laptop[1],1);
+    var isClient=after(i,u,1,12.5)&&!after(i,u,7,5);
+    place('app',T('app',isClient?'client':'your app')+'<small>'+(isClient?'your app, connected':'outside the instance')+'</small>',axy[0]+5,axy[1]-2,true,isClient?'':'');
+  } else place('app','',0,0,false);
+  // backend
+  if(after(i,u,1,6) && !after(i,u,7,6)){ var bt=prog(i,u,1,6,8.5); var bxy=[lerp(P.pm[0],P.be[0],ease(bt)),lerp(P.pm[1],P.be[1],ease(bt))];
+    var leaderOn = (after(i,u,3,0.5)&&!after(i,u,5,5)) || (after(i,u,6,5)&&i<7);
+    var fade = 1-prog(i,u,7,4,6);
+    var busy = st && st.s.procs[0] && (st.s.procs[0].blk>=0 || st.s.procs[0].busy>0);
+    person(bxy[0],bxy[1],{body:C.be,tie:true,star:leaderOn,walk:(i===1&&u>6&&u<8.5)?u:0,alpha:fade,bob:busy?Tg*4:0});
+    var nm=leaderOn?T('backend','backend')+' = '+T('leader','leader'):T('backend','backend process');
+    place('be',nm+'<small>serves this one session</small>',bxy[0]+5,bxy[1]-(leaderOn?6:2),fade>0.05,leaderOn?'leader':'');
+    // role tag
+    var role='';
+    if(i===2){ if(u>=4&&u<7) role=T('parser','parser stage'); else if(u>=7&&u<9.5) role=T('rewriter','rewrite system'); else if(u>=9.5) role=T('planner','planner/optimizer'); }
+    if(i===3) role=T('executor','executor')+' → Gather reached';
+    if(i===4||(i===5&&u<5)) role= st&&st.s.procs[0].reading?'reading tuples (Gather)':(st&&st.s.procs[0].blk>=0?'scanning a block itself':T('executor','executor'));
+    if(i===6&&u>=9){ role= st&&st.s.procs[0].reading?'reading tuples (Gather), no time to scan':'scanning a block itself'; }
+    place('role',role,bxy[0]+5,bxy[1]+30,!!role&&fade>0.05,'role');
+  } else { place('be','',0,0,false); place('role','',0,0,false); }
+  // workers
+  function workerSet(si,spawnT,exitSi,exitT0,exitT1,tagNew){
+    var res=[];
+    [1,2].forEach(function(k){ if(!after(i,u,si,spawnT) || after(i,u,exitSi,exitT1)) { place('w'+k+(tagNew?'n':''),'',0,0,false); return; }
+      var wt=prog(i,u,si,spawnT+(k-1)*0.6,spawnT+2.5+(k-1)*0.6); var home=k===1?P.w1:P.w2;
+      var pos=along([P.pm,[104,96],home],ease(wt));
+      var a=1-prog(i,u,exitSi,exitT0,exitT1);
+      var ps=st&&st.s.procs[k], blocked=ps&&ps.blocked&&!st.s.fin, working=ps&&ps.blk>=0&&!ps.blocked;
+      person(pos[0],pos[1],{body:k===1?C.w1:C.w2,hat:'hard',alpha:a,walk:(wt>0&&wt<1)?u:0,bang:blocked,bob:working?Tg*4+k:0});
+      var share=ps&&ps.at>0?Math.round(ps.bt/ps.at*100):0, mostly=share>=40;
+      var stateTxt=ps&&ps.done?'finished':(mostly?T('blocked','blocked')+' '+share+'% of the time':(blocked?T('blocked','blocked'):(working?'scanning':'started by the postmaster')));
+      var lab=T('worker','worker')+' '+k+(tagNew?' (new process)':'')+'<small>'+stateTxt+'</small>';
+      place('w'+k+(tagNew?'n':''),lab,pos[0]+5,pos[1]-8,a>0.05,mostly?'red':'');
+    });
+  }
+  workerSet(3,6,5,0,3,false);
+  workerSet(6,5.5,7,0,2,true);
+
+  // ---------- flying things ----------
+  if(i===1 && u>=3 && u<6.2){ var e=along([[40,76],[75,80],[86,78]],(u-3)/3); envelope(e[0]-3,e[1]-2); }
+  if(i===1 && u>=9.5 && u<12.5){ var kp=along([[44,82],[75,82],[132,82]],((u-9.5)%1.5)/1.5); key(kp[0]-3,kp[1]-1); }
+  if(i===2 && u<4){ var sq=along(LINE,u/3.5); scroll(sq[0]-3,sq[1]-3); }
+  if(i===6 && u<4){ var sq2=along(LINE,u/3.5); scroll(sq2[0]-3,sq2[1]-3); }
+  if(i===3 && u>=3 && u<5.5){ var rq=along([[134,70],[90,72]],(u-3)/2.5); envelope(rq[0]-3,rq[1]-2); }
+  if(i===6 && u>=4.5 && u<5.8){ var rq2=along([[134,70],[90,72]],(u-4.5)/1.3); envelope(rq2[0]-3,rq2[1]-2); }
+  if(i===7 && u>=3 && u<5){ var tm=along(LINE,(u-3)/2); envelope(tm[0]-3,tm[1]-2); }
+  // tuples in flight to client
+  if(st){ var nowT=simU/TICK; which.forEach(function(){}); var fl=st.s.flights;
+    fl.forEach(function(f){ var age=(nowT-f.t)/4; if(age<0||age>1) return;
+      var start=f.from===0?[P.be[0]+5,P.be[1]+8]:trayXY(f.from,0);
+      var p=along([start,[139,78],[75,80],[36,78]],age); dot(p[0],p[1],f.from===0?C.dot:(f.from===1?'#ffb27d':'#7ee0b5'));
+    }); }
+
+  // ---------- static zone labels ----------
+  place('zOut','outside: your app\'s machine',4,12,true,'zone');
+  place('zInst',T('instance','PostgreSQL instance'),82,12,lit>0,'zone');
+  place('zSm',T('shmem','shared memory')+' · '+T('buffers','shared buffers'),100,106,sm>0,'zone');
+  place('zDisk',T('datafiles','data files on disk')+' · table <b>orders</b> · 24 '+T('block','blocks'),100,140,true,'zone');
+  place('zDoor',T('port','port 5432')+(doorOpen?' · listening':' · closed'),76,101,lit>0,'thing');
+  place('zGather',T('gather','Gather')+' (Workers Planned: 2) + '+T('tqueue','tuple queues'),164,104,gatherOn,'thing');
+  place('zPlan','',148,79,false&&(after(i,u,2,13.5)&&!after(i,u,5,5))||(after(i,u,6,5)&&i<7),'thing');
+  place('zThink','Seq Scan&nbsp;&nbsp;vs&nbsp;&nbsp;Gather → '+T('pseqscan','Parallel Seq Scan')+(u>12?'<small>cheapest estimate: the parallel plan</small>':''),172,44,thinking,'thing');
+  place('zSql',i===6?'SELECT * FROM orders;':'SELECT * … LIKE \'%refund%\'',90,62,(i===2&&u<4)||(i===6&&u<4),'thing');
+  place('zReq','"2 workers, please"',112,64,(i===3&&u>=3&&u<5.5)||(i===6&&u>=4.5&&u<5.8),'thing');
+  place('zConnReq','connection request',60,74,i===1&&u>=3&&u<6,'thing');
+  place('zAuth',T('auth','authentication')+' · pg_hba.conf<small>done by the new backend, not the postmaster</small>',137,102,i===1&&u>=9.5&&u<12.5,'thing');
+  place('zTerm','Terminate',100,74,i===7&&u>=3&&u<5,'thing');
+  place('zSent',st?(st.s.sent+' result '+(which===SIM_ALL?'groups of rows':'rows')+' received'):'',36,124,!!st,'thing');
+  return {i:i,u:u};
+}
+
+/* =================== PLAYER =================== */
+var T0=0, playing=false, last=0, speed=1;
+var chap=document.getElementById('chapters');
+chap.innerHTML=SC.map(function(s,k){ return '<button data-c="'+k+'" title="'+s.title+'">'+s.title+'<span class="pg"></span></button>'; }).join('');
+chap.onclick=function(e){ var b=e.target.closest('button'); if(b){ T0=START[+b.dataset.c]+0.01; render(); } };
+function fmt(s){ s=Math.max(0,s); return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+var subEl=document.getElementById('sub'), lastSubKey='';
+function render(){
+  var r=draw(T0), s=SC[r.i], cur=s.subs[0];
+  s.subs.forEach(function(x){ if(r.u>=x[0]) cur=x; });
+  var key=r.i+':'+cur[0];
+  if(key!==lastSubKey){ lastSubKey=key; var src=SRC[cur[2]];
+    subEl.innerHTML=cur[1]+(cur[3]?': '+cur[3]+'.':'')+'<span class="src muted">Source: <a href="'+src.u+'" target="_blank" rel="noopener">'+src.t+'</a></span>'; }
+  Array.prototype.forEach.call(chap.children,function(b,k){ b.classList.toggle('on',k===r.i); b.querySelector('.pg').style.width=(k<r.i?100:k===r.i?r.u/SC[k].dur*100:0)+'%'; });
+  document.getElementById('scrub').value=Math.round(T0/TOTAL*1000);
+  document.getElementById('clock').textContent=fmt(T0)+' / '+fmt(TOTAL);
+}
+function loop(ts){ if(!playing) return; var dt=Math.min(0.1,(ts-(last||ts))/1000); last=ts; T0+=dt*speed; if(T0>=TOTAL){ T0=TOTAL-0.001; stop(); } render(); if(playing) requestAnimationFrame(loop); }
+function start(){ if(T0>=TOTAL-0.01) T0=0; playing=true; last=0; document.getElementById('play').textContent='❚❚ Pause'; requestAnimationFrame(loop); }
+function stop(){ playing=false; document.getElementById('play').textContent='▶ Play'; }
+document.getElementById('play').onclick=function(){ playing?stop():start(); };
+function sceneOf(t){ var k=0; while(k<SC.length-1&&t>=START[k+1]) k++; return k; }
+document.getElementById('prev').onclick=function(){ var k=sceneOf(T0); T0=START[(T0-START[k]<1.5&&k>0)?k-1:k]+0.01; render(); };
+document.getElementById('next').onclick=function(){ var k=sceneOf(T0); if(k<SC.length-1){ T0=START[k+1]+0.01; render(); } };
+document.getElementById('scrub').oninput=function(e){ T0=e.target.value/1000*TOTAL; render(); };
+Array.prototype.forEach.call(document.querySelectorAll('[data-sp]'),function(b){ b.onclick=function(){ speed=+b.dataset.sp; document.querySelectorAll('[data-sp]').forEach(function(x){x.classList.toggle('on',x===b);}); }; });
+document.addEventListener('keydown',function(e){ if(e.target.tagName==='INPUT') return;
+  if(e.key===' '){ e.preventDefault(); playing?stop():start(); } else if(e.key==='ArrowRight') document.getElementById('next').click(); else if(e.key==='ArrowLeft') document.getElementById('prev').click(); else if(e.key==='Escape'){ pinned=null; hideTerm(); } });
+
+/* =================== CAST & SCRIPT =================== */
+var CAST=[
+ {t:'postmaster',draw:function(){person(5,10,{body:C.pm,hat:'cap'});},role:'The first process. Starts the auxiliary processes, listens on the port, and spawns a backend for each connection. Takes no part in running queries.'},
+ {t:'aux',draw:function(){person(5,10,{body:C.aux[0]});},role:'Long-running helpers with one background job each: checkpointer, background writer, WAL writer, autovacuum launcher…'},
+ {t:'app',draw:function(){person(1,8,{body:C.app}); laptop(9,22,1);},role:'Any program that speaks the PostgreSQL protocol. It becomes a client once its connection is established.'},
+ {t:'backend',draw:function(){person(5,10,{body:C.be,tie:true});},role:'Created for one connection. Parses, rewrites, plans and executes that session\'s queries, and exits when the client disconnects.'},
+ {t:'leader',draw:function(){person(5,12,{body:C.be,tie:true,star:true});},role:'Not a new process: the same backend, while it runs a Gather node. It reads every tuple the workers produce, and scans too when it has time.'},
+ {t:'worker',draw:function(){person(5,10,{body:C.w1,hat:'hard'});},role:'Started by the postmaster at the leader\'s request, for one parallel query. Scans ranges of blocks and hands matching tuples to the leader, then exits.'},
+ {t:'gather',draw:function(){px(2,10,16,12,'#2b3a4f'); px(3,12,4,4,C.w1); px(8,12,4,4,C.w1); px(3,17,4,4,C.w2);},role:'Prop, not an actor: a node of the plan, run by the leader. Where the workers\' tuples are collected.'},
+ {t:'shmem',draw:function(){px(1,10,18,12,C.smem); for(var k=0;k<3;k++) px(3+k*5,14,4,4,C.cached);},role:'The stage everyone shares: RAM common to the instance. Shared buffers hold copies of table pages.'},
+ {t:'datafiles',draw:function(){px(1,8,18,16,C.disk); for(var k=0;k<2;k++) for(var j=0;j<2;j++) px(2+k*9,10+j*7,7,5,C.blk);},role:'Where the table really lives: data files in the data directory, made of fixed-size blocks (pages).'}
+];
+document.getElementById('cast').innerHTML=CAST.map(function(c,k){ var g=GL[c.t]; return '<div class="actor"><canvas width="20" height="32" id="ca'+k+'"></canvas><div><b>'+T(c.t,g.w)+'</b><span class="small">'+c.role+'</span><br><span class="tag '+(g.pg?'off':'not')+'">'+(g.pg?'official PostgreSQL term':'not a PostgreSQL term')+'</span></div></div>'; }).join('');
+CAST.forEach(function(c,k){ var el=document.getElementById('ca'+k), sv=cx; cx=el.getContext('2d'); cx.fillStyle='#0b0e13'; cx.fillRect(0,0,20,32); c.draw(); cx=sv; });
+document.getElementById('script').innerHTML=SC.map(function(s,k){ return '<h4>'+s.title+'</h4><ol>'+s.subs.map(function(x){ return '<li data-t0="'+(START[k]+x[0]+0.01)+'">'+x[1]+(x[3]?': '+x[3]+'.':'')+' <span class="small muted">('+SRC[x[2]].t+')</span></li>'; }).join('')+'</ol>'; }).join('');
+document.getElementById('script').onclick=function(e){ if(e.target.closest('.term')) return; var li=e.target.closest('li'); if(li){ T0=+li.dataset.t0; render(); document.getElementById('stage').scrollIntoView({behavior:'smooth',block:'center'}); } };
+window.__play={SIM_FIND:SIM_FIND,SIM_ALL:SIM_ALL,SC:SC,TOTAL:TOTAL,seek:function(t){T0=t;render();}};
+render();
+</script>
+</body>
+</html>

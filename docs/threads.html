@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POSIX threads in C, from the core idea</title>
+<style>
+:root{color-scheme:light dark;--bg:#f2f5f3;--tx:#16212b;--mu:#566471;--pn:#fff;--ln:#cdd6d2;--a:#0f6b5c;--b:#a82a6d;--c:#8a6200;--hi:#e4efe9}
+@media(prefers-color-scheme:dark){:root{--bg:#111a1d;--tx:#e3eaea;--mu:#93a3a6;--pn:#182428;--ln:#2b3b40;--a:#58cdb6;--b:#ef8fc0;--c:#e6c15a;--hi:#1f3036}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;padding-left:260px;background:var(--bg);color:var(--tx);font:17px/1.65 Georgia,"Times New Roman",serif}
+main{max-width:800px;margin:0 auto;padding:28px 18px 80px}
+h1{font-size:32px;line-height:1.2;margin:0 0 10px}h2{font-size:24px;margin:54px 0 8px;padding-top:6px}h3{font-size:19px;margin:30px 0 6px}
+p{margin:0 0 12px}.mu{color:var(--mu);font-size:15px}
+a{color:var(--a)}
+ul,ol.pl{padding-left:22px;margin:0 0 12px}li{margin:4px 0}
+code{font:14px ui-monospace,Consolas,monospace;background:var(--hi);padding:1px 5px;border-radius:3px}
+.t{border-bottom:1.5px dotted var(--a);cursor:help}.t:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,#nav a:focus-visible{outline:2px solid var(--b);outline-offset:2px}
+#tip{position:fixed;z-index:50;max-width:340px;background:var(--tx);color:var(--bg);font:14px/1.45 system-ui,sans-serif;padding:9px 12px;border-radius:4px}
+#tip i{display:block;margin-top:4px;opacity:.9}
+/* sidebar */
+#nav{position:fixed;top:0;left:0;bottom:0;width:260px;overflow:auto;background:var(--pn);border-right:1px solid var(--ln);padding:18px 12px 30px;font:14px/1.35 system-ui,sans-serif;z-index:20}
+#nav b{display:block;margin:0 8px 10px;font-size:15px}
+#nav a{display:block;padding:5px 8px;color:var(--mu);text-decoration:none;border-left:3px solid transparent;border-radius:0 3px 3px 0}
+#nav a:hover{color:var(--tx)}
+#nav a.on{color:var(--tx);border-left-color:var(--a);background:var(--hi)}
+#nav a.sub{padding-left:22px;font-size:13px}
+#nav hr{border:0;border-top:1px solid var(--ln);margin:10px 8px}
+#burger{display:none;position:fixed;top:10px;left:10px;z-index:30;font:600 14px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+@media(max-width:940px){body{padding-left:0}#nav{transform:translateX(-102%);transition:transform .18s}#nav.open{transform:none;box-shadow:0 0 30px rgba(0,0,0,.4)}#burger{display:block}main{padding-top:58px}}
+/* controls */
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0;font:15px system-ui,sans-serif}
+button,select{font:inherit;background:var(--pn);color:var(--tx);border:1px solid var(--ln);border-radius:4px;padding:6px 12px;cursor:pointer}
+.ctl label{max-width:100%}select{max-width:100%}
+button:hover{border-color:var(--a)}button:disabled{opacity:.45;cursor:default}
+input[type=range]{flex:1 1 220px;accent-color:var(--a)}
+/* panels */
+.dm{background:var(--pn);border:1px solid var(--ln);border-radius:4px;padding:12px;margin:14px 0;font:14px/1.45 system-ui,sans-serif}
+.dm h4{margin:0 0 6px;font-size:15px}
+.cap{font:14px/1.5 system-ui,sans-serif;color:var(--mu);margin:6px 0 0}
+.note{border-left:4px solid var(--a);background:var(--hi);padding:9px 13px;margin:14px 0;font-size:15px;border-radius:0 4px 4px 0}
+.note.warn{border-left-color:var(--b)}
+.vd{margin-top:10px;padding:8px 10px;border:1px solid var(--ln);border-radius:4px;font:14px/1.45 system-ui,sans-serif}
+.vd.ok{background:var(--hi);border-color:var(--a)}.vd.bad{border:2px solid var(--b)}
+.msg{min-height:2.9em;margin:8px 0 0;color:var(--mu)}
+/* code */
+.fn{font:600 13px ui-monospace,Consolas,monospace;background:var(--hi);border:1px solid var(--ln);border-bottom:0;border-radius:4px 4px 0 0;padding:4px 10px;margin-top:14px;display:inline-block}
+pre.cb,pre.out{margin:0 0 14px;padding:10px 12px;background:var(--pn);border:1px solid var(--ln);border-radius:0 4px 4px 4px;overflow-x:auto;font:13px/1.5 ui-monospace,Consolas,monospace}
+pre.out{border-radius:4px;border-left:4px solid var(--c);margin-top:6px}
+pre code{padding:0;background:none;border-radius:0;font:inherit}
+.dl{color:var(--b)}.ad{color:var(--a)}
+.rl{font:600 12px system-ui,sans-serif;color:var(--c);display:block;margin-top:10px}
+/* model demo */
+.cols{display:grid;grid-template-columns:1fr 170px 1fr;gap:10px;align-items:start}
+@media(max-width:760px){.cols{grid-template-columns:1fr}}
+.th{border:1px solid var(--ln);border-radius:4px;padding:8px;overflow-x:auto}
+.th0{border-top:4px solid var(--a)}.th1{border-top:4px solid var(--b)}
+.th ol{list-style:none;margin:0;padding:0;font:12.5px/1.65 ui-monospace,Consolas,monospace}
+.th li{padding:1px 6px;border-radius:3px;white-space:nowrap;margin:1px 0}
+.th li.dn{opacity:.4;text-decoration:line-through}
+.th li.cur{background:var(--hi);outline:2px solid var(--tx)}
+.th li.cur.bl{outline-style:dashed;outline-color:var(--b)}
+.rg{margin-top:6px;font:13px ui-monospace,Consolas,monospace}.stt{margin-top:6px;color:var(--mu);font-size:13px}
+.mem{display:flex;flex-direction:column;gap:8px}
+.cell{border:2px solid var(--tx);border-radius:4px;padding:6px 8px;text-align:center}
+.cell span{display:block;font:12px ui-monospace,Consolas,monospace;color:var(--mu)}.cell b{font-size:28px}
+.lk{border:2px solid var(--ln);border-radius:4px;padding:5px 8px;text-align:center;font:600 13px ui-monospace,Consolas,monospace}
+.lk.held{border-color:var(--c);background:var(--hi)}
+svg.wg{width:100%;max-width:320px;height:auto;display:block;margin:8px auto 0}
+svg text{font:12px ui-monospace,Consolas,monospace;fill:var(--tx)}
+/* memory demo */
+.pm{display:grid;gap:10px;grid-template-columns:1fr 1fr}.pm.one{grid-template-columns:1fr}
+@media(max-width:620px){.pm{grid-template-columns:1fr}}
+.pb{border:2px solid var(--tx);border-radius:6px;padding:8px 10px}.pb h4{margin:0 0 6px}
+.seg{border:1px solid var(--ln);border-radius:3px;padding:4px 8px;margin:4px 0;font:13px ui-monospace,Consolas,monospace;background:var(--bg)}
+.seg b{color:var(--a)}.seg.hot{background:var(--hi);border-color:var(--a)}
+.stks{display:flex;gap:8px;flex-wrap:wrap}.stks .seg{flex:1 1 120px}
+.stks .s0{border-left:4px solid var(--a)}.stks .s1{border-left:4px solid var(--b)}
+/* timeline */
+.tg{display:grid;grid-template-columns:repeat(4,1fr);gap:0;font:13px system-ui,sans-serif;min-width:560px}
+.tw{overflow-x:auto}
+.tg>div{padding:5px 6px;min-height:34px;border-bottom:1px dashed var(--ln)}
+.tg .hd{font-weight:700;border-bottom:2px solid var(--tx);min-height:0}
+.tg .al{background:var(--hi);border-left:3px solid var(--a);border-right:3px solid var(--a)}
+.tg .ch{background:var(--a);color:var(--bg);border-radius:4px;padding:3px 6px;font:12px ui-monospace,Consolas,monospace}
+.tg .ch.w{background:none;color:var(--tx);border:1px dashed var(--tx)}
+.tg .ch.m{background:var(--c)}
+/* bars */
+.bars{margin:8px 0}.bars .r{display:flex;align-items:center;gap:8px;margin:4px 0;font:13px ui-monospace,Consolas,monospace}
+.bars .l{width:74px;flex:none;color:var(--mu)}.bars .tr{flex:1;height:18px;background:var(--hi);border:1px solid var(--ln);border-radius:3px;position:relative}
+.bars .f{height:100%;background:var(--b)}.bars .f.ok{background:var(--a)}.bars .n{width:76px;text-align:right;flex:none}
+.bars .mk{position:absolute;right:-1px;top:-4px;bottom:-4px;border-right:2px dashed var(--tx)}
+/* lifetime */
+.lt .row{display:flex;align-items:center;gap:8px;margin:8px 0;font:13px ui-monospace,Consolas,monospace}.lt .row>span{width:62px;flex:none}
+.lt .tk{flex:1;height:26px;position:relative;background:var(--hi);border:1px solid var(--ln);border-radius:3px}
+.lt .bar{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
+.lt .wt{background:repeating-linear-gradient(45deg,transparent 0 6px,var(--ln) 6px 12px);border:1px dashed var(--tx)}
+.lt .x{position:absolute;top:1px;font:700 18px system-ui;color:var(--b)}
+/* tokens */
+.tkn{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}@media(max-width:620px){.tkn{grid-template-columns:1fr}}
+.tkn .th li{text-decoration:none;opacity:1}.tkn .bad{color:var(--b);font-weight:700}
+.cv{display:grid;grid-template-columns:1fr 190px 1fr;gap:10px}@media(max-width:820px){.cv{grid-template-columns:1fr}}
+.cv .sl{display:inline-block;border:1px solid var(--b);color:var(--b);border-radius:3px;padding:0 6px;font-weight:700}
+.logb{font:12.5px/1.5 ui-monospace,Consolas,monospace;border:1px solid var(--ln);border-radius:4px;padding:6px 8px;min-height:7.5em;background:var(--bg)}
+table.ref{border-collapse:collapse;width:100%;font:14px/1.45 system-ui,sans-serif;margin:10px 0}
+table.ref th,table.ref td{border:1px solid var(--ln);padding:6px 9px;text-align:left;vertical-align:top}table.ref th{background:var(--hi)}
+.tw2{overflow-x:auto}
+dt{font-weight:700;margin-top:12px}dd{margin:0 0 0 14px;font-size:15px}dd i{color:var(--mu)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style></head><body>
+<button id="burger" aria-controls="nav" aria-expanded="false">☰ Topics</button>
+<nav id="nav" aria-label="Topics">
+<b>POSIX threads in C</b>
+<a href="#top">Start here</a>
+<a href="#s1">1. Process and thread</a>
+<a href="#s2">2. Create and join</a>
+<a class="sub" href="#s2-1">2.1 The first program</a>
+<a class="sub" href="#s2-2">2.2 Passing arguments</a>
+<a href="#s3">3. Data race</a>
+<a href="#s4">4. Mutex</a>
+<a href="#s5">5. Deadlock</a>
+<a href="#s6">6. Condition variables</a>
+<a href="#s7">7. Thread lifetime</a>
+<a href="#s8">8. Thread-safe functions</a>
+<a href="#s9">9. Build and run on Cygwin</a>
+<a href="#s10">10. Function reference</a>
+<a href="#s11">Word origins</a>
+<a href="#s12">Sources</a>
+<hr>
+<a href="concurrency.html">Prerequisite: concurrent vs parallel</a>
+</nav>
+<main>
+
+<section id="top">
+<h1>POSIX threads in C, from the core idea</h1>
+<p>A program normally runs one sequence of instructions. POSIX threads (<span class="t" data-k="pthreads">pthreads</span>) let one <span class="t" data-k="process">process</span> run several sequences, each called a <span class="t" data-k="thread">thread</span>, all working on the same <span class="t" data-k="memory">memory</span>. That sharing is the point and the difficulty at once: cooperation becomes cheap, and mistakes become possible. One idea runs through every section below: <strong>shared memory needs rules</strong>. Each section pairs a picture or animation with a small C program that was compiled and run.</p>
+<p>Dotted words show a meaning and an origin on hover or tap. The difference between <span class="t" data-k="concurrent">concurrent</span> and <span class="t" data-k="parallel">parallel</span> is covered in <a href="concurrency.html">the earlier page</a>; only the part needed here is repeated.</p>
+<div class="note"><strong>How the examples were checked.</strong> Every C program on this page is written in C90 with GNU extensions (gnu90): declarations at the top of each block, <code>/* */</code> comments only, no C99 features. Each was compiled with <code>gcc -std=gnu90 -Wall -Wextra -pedantic -pthread</code>, which produced no warnings (neither did the stricter <code>-Wc90-c99-compat -Wdeclaration-after-statement</code>), and run on Linux (Ubuntu 24.04, GCC 13.3, 2 cores). Printed outputs are copied from those runs and marked as such. Timing-dependent output differs between runs and between machines, so a run on Cygwin will show different numbers, and that is expected. The animations are models that follow the rules described; they are not measurements of hardware.</div>
+</section>
+
+<section id="s1">
+<h2>1. One process, many threads</h2>
+<p>POSIX describes a thread as a single flow of control within a process. Each thread has its own thread ID, scheduling attributes, <code>errno</code> value and the resources needed for its own flow of control, such as a <span class="t" data-k="stack">stack</span>. Everything whose address a thread can obtain, including global variables, storage from <code>malloc()</code> (the <span class="t" data-k="heap">heap</span>) and local variables, is accessible to all threads of the same process (POSIX.1-2024, XBD chapter 3, “Thread”).</p>
+<p>That is the difference from a new process. After <span class="t" data-k="fork">fork</span><code>()</code>, the child is a copy of the parent, so each has its own variables and a write in one is invisible to the other. A new thread gets no copy: it runs inside the same <span class="t" data-k="address">address</span> space. The picture below shows both. Switch the mode and press the button: the second flow writes <code>x = 99</code>.</p>
+<div class="dm" id="memdemo"></div>
+<p class="mu">Where threads run is a separate layer. The operating system’s <span class="t" data-k="scheduler">scheduler</span> decides which thread runs on which <span class="t" data-k="core">core</span>, and with <span class="t" data-k="smt">smt</span> a core presents several <span class="t" data-k="logical">logical</span> processors. None of that changes what the picture shows: the threads share memory wherever they run.</p>
+</section>
+
+<section id="s2">
+<h2>2. Creating and joining threads</h2>
+<h3 id="s2-1">2.1 The first program</h3>
+<p>Three threads are started, each prints one line, and the main thread waits for all of them.</p>
+<div class="fn">hello_threads.c</div><pre class="cb"><code>#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+
+static void *worker(void *arg)
+{
+    int id = *(int *)arg;
+
+    printf(&quot;hello from thread %d\n&quot;, id);
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t tid[3];
+    int ids[3];
+    int i, rc;
+
+    for (i = 0; i &lt; 3; i++) {
+        ids[i] = i;                       /* one slot per thread */
+        rc = pthread_create(&amp;tid[i], NULL, worker, &amp;ids[i]);
+        if (rc != 0) {                    /* error NUMBER, not errno */
+            fprintf(stderr, &quot;pthread_create: %s\n&quot;, strerror(rc));
+            return 1;
+        }
+    }
+    for (i = 0; i &lt; 3; i++)
+        pthread_join(tid[i], NULL);       /* wait for each thread */
+    printf(&quot;all threads finished\n&quot;);
+    return 0;
+}</code></pre>
+<ul>
+<li><code>pthread_create(&amp;tid, attr, start_routine, arg)</code> starts <code>start_routine(arg)</code> in a new thread. It returns 0 on success; otherwise it returns an error number. The error number is returned, not placed in <code>errno</code>, which is why the program passes <code>rc</code> to <code>strerror</code>.</li>
+<li>The start routine has the type <code>void *(*)(void *)</code>: one pointer in, one pointer out. Returning from it ends the thread.</li>
+<li><code>pthread_create</code> returns immediately. The new thread may run at once, later, or on another core; the order is up to the scheduler.</li>
+<li><span class="t" data-k="join">join</span>: <code>pthread_join(tid, &amp;result)</code> waits until the thread has terminated and stores the value it returned.</li>
+<li><code>-pthread</code> belongs in both the compile and the link step. The GCC manual describes it as the option for POSIX threads support, available on GNU/Linux, most other Unix systems, and x86 Cygwin and MinGW.</li>
+</ul>
+<span class="rl">Real runs (Linux sandbox, gnu90 build): 300 runs, one example of each order seen</span>
+<pre class="out">297 of 300 runs          2 of 300 runs            1 of 300 runs
+hello from thread 0      hello from thread 0      hello from thread 2
+hello from thread 1      hello from thread 2      hello from thread 0
+hello from thread 2      hello from thread 1      hello from thread 1
+all threads finished     all threads finished     all threads finished</pre>
+<p>Most runs printed 0, 1, 2, but two other orders appeared, while “all threads finished” was always last: the joins guarantee that. Rare is not the same as impossible: a different machine, load or operating system (such as Cygwin) can make other orders common. This is the first rule of thread output: <strong>between threads, order is not promised unless something enforces it</strong>. The animation steps through one possible timeline for each order seen above.</p>
+<div class="dm" id="tldemo"></div>
+
+<h3 id="s2-2">2.2 Passing arguments: who owns the memory?</h3>
+<p>The new thread reads <code>arg</code> when it runs, not when <code>pthread_create</code> returns. If <code>arg</code> points at a variable that the creating thread keeps changing, the new thread sees whatever value is there at the moment it looks. The program above avoids this by giving each thread its own slot, <code>ids[i]</code>. The animation contrasts it with the tempting <code>&amp;i</code>.</p>
+<div class="dm" id="argdemo"></div>
+<p class="mu">The same reasoning covers lifetime: a pointer to a local variable of a function that has already returned points at memory that is no longer valid. Data handed to a thread must outlive the thread’s use of it.</p>
+</section>
+
+<section id="s3">
+<h2>3. Data race: two threads, one counter</h2>
+<p>Two threads each add 1 to the same variable a million times. The expected total is two million.</p>
+<div class="fn">race.c</div><pre class="cb"><code>#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+
+#define N 1000000L
+
+static long counter = 0;                  /* shared by both threads */
+
+static void *work(void *arg)
+{
+    long i;
+
+    (void)arg;
+    for (i = 0; i &lt; N; i++)
+        counter++;                        /* not atomic: load, add, store */
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t a, b;
+
+    pthread_create(&amp;a, NULL, work, NULL);
+    pthread_create(&amp;b, NULL, work, NULL);
+    pthread_join(a, NULL);
+    pthread_join(b, NULL);
+    printf(&quot;expected %ld, got %ld\n&quot;, 2 * N, counter);
+    return 0;
+}</code></pre>
+<p>The statement <code>counter++</code> looks like one step, but on typical hardware it is three: read the value into a <span class="t" data-k="register">register</span>, add 1 there, write the register back. Each thread has its own registers; the variable is in shared memory. If both threads read before either writes, one increment is lost. Step through it below, one machine-level step at a time, choosing which thread moves.</p>
+<div class="dm" id="racedemo"></div>
+<span class="rl">Output of real runs (Linux sandbox)</span>
+<div class="bars" id="racebars"></div>
+<p>At <code>-O0</code>, all five runs lost updates; the worst kept barely more than half of them (five further runs also all lost updates). At <code>-O2</code>, all five runs printed the correct total. The optimizer is free to keep <code>counter</code> in a register inside the loop, which shrinks the window in which the threads collide, but the program is still wrong: correct output on a given run is luck, not a guarantee.</p>
+<h3>Race condition and data race</h3>
+<p>OSTEP calls the situation a <span class="t" data-k="race">race</span> condition: the result depends on the timing of the code’s execution. POSIX gives the memory-level case a precise name. A <span class="t" data-k="datarace">data race</span> exists when two threads make conflicting accesses to the same memory location (at least one a write), at least one of the accesses is not <span class="t" data-k="atomic">atomic</span>, and neither access is ordered before the other (POSIX.1-2024, XBD 4.15.1.1). The consequence is not just a wrong number: a program with a data race has undefined behavior, so the language promises nothing about it.</p>
+<p>ThreadSanitizer is a compiler-based tool that finds data races while the program runs. On the same program, built with <code>gcc -std=gnu90 -g -O0 -fsanitize=thread -pthread</code> on Linux, it printed (abridged, first of two warnings):</p>
+<pre class="out">WARNING: ThreadSanitizer: data race (pid=2762)
+  Read of size 8 at 0x55fa68080018 by thread T2:
+    #0 work race.c:14
+  Previous write of size 8 at 0x55fa68080018 by thread T1:
+    #0 work race.c:14
+  Location is global 'counter' of size 8
+  Thread T2 created by main thread at: ... pthread_create ... main race.c:23
+  Thread T1 created by main thread at: ... pthread_create ... main race.c:22
+SUMMARY: ThreadSanitizer: data race race.c:14 in work</pre>
+<p class="mu">The report names the variable, the two threads, and where each was created. Line 14 is the <code>counter++</code> statement. That same run printed <code>expected 2000000, got 2000000</code>: the total happened to be right, and ThreadSanitizer still reported the race. A correct result does not mean a correct program.</p>
+</section>
+
+<section id="s4">
+<h2>4. Mutex: taking turns</h2>
+<p>A <span class="t" data-k="mutex">mutex</span> is a lock object. Only one thread at a time can hold it; a thread that tries to <span class="t" data-k="lock">lock</span> a held mutex is made to <span class="t" data-k="wait">wait</span> until the holder unlocks it. Code between lock and unlock is a <span class="t" data-k="critical">critical</span> section: only one thread at a time can be inside it, so the three machine-level steps can no longer be interleaved with another thread’s. The model below is the same as before with lock and unlock around the increment. Try the same bad order: the second thread’s attempt to take the lock is refused until the first thread unlocks.</p>
+<div class="fn">mutex.c</div><pre class="cb"><code>#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+
+#define N 1000000L
+
+static long counter = 0;
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void *work(void *arg)
+{
+    long i;
+
+    (void)arg;
+    for (i = 0; i &lt; N; i++) {
+        pthread_mutex_lock(&amp;lock);        /* enter the critical section */
+        counter++;
+        pthread_mutex_unlock(&amp;lock);      /* leave it */
+    }
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t a, b;
+
+    pthread_create(&amp;a, NULL, work, NULL);
+    pthread_create(&amp;b, NULL, work, NULL);
+    pthread_join(a, NULL);
+    pthread_join(b, NULL);
+    printf(&quot;expected %ld, got %ld\n&quot;, 2 * N, counter);
+    return 0;
+}</code></pre>
+<div class="dm" id="mutexdemo"></div>
+<span class="rl">Output of three real runs (Linux sandbox)</span>
+<pre class="out">expected 2000000, got 2000000
+expected 2000000, got 2000000
+expected 2000000, got 2000000</pre>
+<h3>Rules that go with a mutex</h3>
+<ul>
+<li>Initialize it: <code>PTHREAD_MUTEX_INITIALIZER</code> for a static mutex, as in the program above, or <code>pthread_mutex_init()</code>.</li>
+<li>The thread that locked a mutex is the one that unlocks it. For the default mutex type, unlocking a mutex that the caller does not hold is undefined behavior (POSIX.1-2024, <code>pthread_mutex_lock</code>).</li>
+<li>Locking a normal mutex that the same thread already holds deadlocks that thread (same page).</li>
+<li>The lock only helps if <em>every</em> access to the shared variable goes through it. One unlocked access is enough to bring the data race back.</li>
+<li>Locking is not free: threads that collide on the lock wait, so the work inside it should stay short.</li>
+</ul>
+</section>
+
+<section id="s5">
+<h2>5. Deadlock: everyone waiting, nobody running</h2>
+<p>A <span class="t" data-k="deadlock">deadlock</span> appears when each thread in a group holds something and waits for something another member holds. OSTEP lists four conditions that must all hold: mutual exclusion, hold-and-wait, no preemption, and circular wait. Two mutexes locked in opposite orders are enough. The animation shows the locks and who holds or wants them. Use the buttons to let each thread take its first lock, then try the second.</p>
+<div class="fn">deadlock.c</div><pre class="cb"><code>#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;time.h&gt;
+
+static pthread_mutex_t m1 = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t m2 = PTHREAD_MUTEX_INITIALIZER;
+
+static void pause_a_moment(void)          /* widen the window so it always happens */
+{
+    struct timespec t = { 0, 100000000L };    /* 100 ms */
+
+    nanosleep(&amp;t, NULL);
+}
+
+static void *thread_a(void *arg)
+{
+    (void)arg;
+    pthread_mutex_lock(&amp;m1);
+    pause_a_moment();
+    pthread_mutex_lock(&amp;m2);              /* waits for B, who waits for A */
+    puts(&quot;A got both locks&quot;);
+    pthread_mutex_unlock(&amp;m2);
+    pthread_mutex_unlock(&amp;m1);
+    return NULL;
+}
+
+static void *thread_b(void *arg)
+{
+    (void)arg;
+    pthread_mutex_lock(&amp;m2);              /* opposite order: the bug */
+    pause_a_moment();
+    pthread_mutex_lock(&amp;m1);
+    puts(&quot;B got both locks&quot;);
+    pthread_mutex_unlock(&amp;m1);
+    pthread_mutex_unlock(&amp;m2);
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t a, b;
+
+    pthread_create(&amp;a, NULL, thread_a, NULL);
+    pthread_create(&amp;b, NULL, thread_b, NULL);
+    pthread_join(a, NULL);                /* never returns */
+    pthread_join(b, NULL);
+    return 0;
+}</code></pre>
+<div class="dm" id="deaddemo"></div>
+<p>The 100 ms pause in the program only widens the window so that the problem appears on every run. Without it the program would usually work, and fail only occasionally, which is harder to find.</p>
+<h3>The usual fix: one lock order for everyone</h3>
+<p>If every thread takes <code>m1</code> before <code>m2</code>, a circular wait cannot form, so the deadlock cannot happen. In <code>deadlock_fixed.c</code>, only <code>thread_b</code> changes:</p>
+<div class="fn">deadlock.c → deadlock_fixed.c (changed lines)</div><pre class="cb"><code><span class="mu">…</span>
+      (void)arg;
+<span class="dl">-     pthread_mutex_lock(&amp;m2);              /* opposite order: the bug */</span>
+<span class="ad">+     pthread_mutex_lock(&amp;m1);              /* same order as A: the fix */</span>
+      pause_a_moment();
+<span class="dl">-     pthread_mutex_lock(&amp;m1);</span>
+<span class="ad">+     pthread_mutex_lock(&amp;m2);</span>
+      puts(&quot;B got both locks&quot;);
+<span class="ad">+     pthread_mutex_unlock(&amp;m2);</span>
+      pthread_mutex_unlock(&amp;m1);
+<span class="dl">-     pthread_mutex_unlock(&amp;m2);</span>
+      return NULL;
+<span class="mu">…</span>
+      pthread_create(&amp;b, NULL, thread_b, NULL);
+<span class="dl">-     pthread_join(a, NULL);                /* never returns */</span>
+<span class="ad">+     pthread_join(a, NULL);                /* now returns */</span>
+      pthread_join(b, NULL);</code></pre>
+<span class="rl">Real runs (Linux sandbox)</span>
+<pre class="out">$ timeout 3 ./deadlock          (no output; killed by timeout after 3 s, exit status 124)
+$ ./deadlock_fixed
+A got both locks
+B got both locks</pre>
+<p class="mu">In 50 of 51 runs A printed first; in one run B did. The fix guarantees that both threads finish, not which one goes first: whoever takes <code>m1</code> first wins, and the scheduler decides that.</p>
+<p class="mu">A second tool is <code>pthread_mutex_trylock()</code>, which returns an error instead of waiting when the mutex is held; a thread can then release what it holds and retry, which removes the hold-and-wait condition. OSTEP’s chapter on common concurrency problems discusses both techniques.</p>
+</section>
+
+<section id="s6">
+<h2>6. Condition variables: waiting for a change</h2>
+<p>A mutex answers “who may touch the data now”. It does not answer “wait until the data is in the right <span class="t" data-k="condition">condition</span>”. Polling in a loop wastes the core. A condition variable lets a thread sleep until another thread announces a change. OSTEP describes it as an explicit queue that threads put themselves on when some state of execution is not as desired.</p>
+<p>The classic example is a <span class="t" data-k="producer">producer</span> and a <span class="t" data-k="consumer">consumer</span> sharing a box that holds one item.</p>
+<div class="fn">condvar.c</div><pre class="cb"><code>#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+
+static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t can_put  = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t can_take = PTHREAD_COND_INITIALIZER;
+static int full = 0;                      /* the predicate: is the box full? */
+static int box = 0;                       /* holds at most one item */
+
+static void *producer(void *arg)
+{
+    int i;
+
+    (void)arg;
+    for (i = 1; i &lt;= 5; i++) {
+        pthread_mutex_lock(&amp;m);
+        while (full)                      /* re-check after every wakeup */
+            pthread_cond_wait(&amp;can_put, &amp;m);
+        box = i;
+        full = 1;
+        printf(&quot;put  %d\n&quot;, i);
+        pthread_cond_signal(&amp;can_take);
+        pthread_mutex_unlock(&amp;m);
+    }
+    return NULL;
+}
+
+static void *consumer(void *arg)
+{
+    int i;
+
+    (void)arg;
+    for (i = 1; i &lt;= 5; i++) {
+        pthread_mutex_lock(&amp;m);
+        while (!full)
+            pthread_cond_wait(&amp;can_take, &amp;m);
+        printf(&quot;took %d\n&quot;, box);
+        full = 0;
+        pthread_cond_signal(&amp;can_put);
+        pthread_mutex_unlock(&amp;m);
+    }
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t p, c;
+
+    pthread_create(&amp;c, NULL, consumer, NULL);
+    pthread_create(&amp;p, NULL, producer, NULL);
+    pthread_join(p, NULL);
+    pthread_join(c, NULL);
+    return 0;
+}</code></pre>
+<ul>
+<li><code>pthread_cond_wait(&amp;cv, &amp;m)</code> releases the mutex and blocks the thread as one atomic step. When the thread wakes, the call re-acquires the mutex before returning (POSIX.1-2024).</li>
+<li><code>pthread_cond_signal()</code> unblocks at least one thread waiting on the condition variable. If none is waiting, it has no effect: the <span class="t" data-k="signal">signal</span> is not remembered. That is why the state is kept in a variable (<code>full</code>) and not only in the signal.</li>
+<li>Waits go in a <code>while</code> loop that re-checks the <span class="t" data-k="predicate">predicate</span>. A wait may return when the predicate is still false: POSIX allows <span class="t" data-k="spurious">spurious</span> wakeups, and another thread may also have taken the item between the signal and the wake.</li>
+</ul>
+<p>The animation runs this program. Press the step buttons or let the threads run in random order. Then tick the checkbox that turns <code>while</code> into <code>if</code>, add a spurious wakeup, and watch what the missing re-check costs.</p>
+<div class="dm" id="cvdemo"></div>
+<span class="rl">Output of a real run (Linux sandbox)</span>
+<pre class="out">put  1
+took 1
+put  2
+took 2
+put  3
+took 3
+put  4
+took 4
+put  5
+took 5</pre>
+<p class="mu">The strict alternation is a property of the one-slot box: a second item cannot be put until the first is taken.</p>
+</section>
+
+<section id="s7">
+<h2>7. Thread lifetime: why main waits</h2>
+<p>A thread ends when its start routine returns or when it calls <code>pthread_exit()</code>. A process ends when <code>main</code> returns (which behaves like calling <code>exit()</code>) or when any thread calls <code>exit()</code>; that ends all of its threads, finished or not. A <code>pthread_join</code> in <code>main</code> is what keeps the process alive until the worker is done. Drag the slider to move time forward and compare the two cases.</p>
+<div class="dm lt" id="ltdemo"></div>
+</section>
+
+<section id="s8">
+<h2>8. Thread-safe functions</h2>
+<p>A function is <span class="t" data-k="threadsafe">thread-safe</span> if it can be called by several threads at once without breaking. POSIX requires almost all of its functions to be thread-safe and lists the exceptions (POSIX.1-2024, XSH 2.9.1). The list includes <code>strtok</code>, <code>localtime</code>, <code>strerror</code> and <code>setenv</code>. Several have a thread-safe replacement taking caller-provided storage: <code>strtok_r</code>, <code>localtime_r</code>, <code>strerror_r</code>.</p>
+<p><code>strtok</code> is the plain example. It remembers where it stopped in a hidden variable shared by every caller. Step through two threads splitting two different strings at the same time.</p>
+<div class="dm" id="tokdemo"></div>
+<p class="mu">A single-threaded program such as a small shell can use <code>strtok</code> safely: only one caller ever touches the hidden variable. The problem begins when a second thread calls it. Some libraries make their own <code>strtok</code> safe in practice; POSIX does not require it, so portable code uses <code>strtok_r</code>.</p>
+</section>
+
+<section id="s9">
+<h2>9. Build and run on Cygwin</h2>
+<p>Cygwin provides the POSIX threads interface, and GCC’s <code>-pthread</code> option applies to it. The commands, from the folder holding the six <code>.c</code> files:</p>
+<pre class="cb"><code>gcc -std=gnu90 -Wall -Wextra -pedantic -pthread hello_threads.c -o hello_threads
+gcc -std=gnu90 -Wall -Wextra -pedantic -pthread race.c    -o race
+gcc -std=gnu90 -Wall -Wextra -pedantic -pthread mutex.c   -o mutex
+gcc -std=gnu90 -Wall -Wextra -pedantic -pthread deadlock.c       -o deadlock
+gcc -std=gnu90 -Wall -Wextra -pedantic -pthread deadlock_fixed.c -o deadlock_fixed
+gcc -std=gnu90 -Wall -Wextra -pedantic -pthread condvar.c -o condvar
+
+./hello_threads
+for i in 1 2 3 4 5; do ./race; done
+for i in 1 2 3 4 5; do ./mutex; done
+timeout 3 ./deadlock; echo "exit status $?"
+./deadlock_fixed
+./condvar</code></pre>
+<ul>
+<li><strong>hello_threads:</strong> the order of the three lines may change from run to run; on some machines one order dominates, so run it many times (<code>for i in $(seq 100); do ./hello_threads; done | sort | uniq -c</code> counts the lines).</li>
+<li><strong>race:</strong> totals below 2000000 on some runs are the data race made visible. A build with <code>-O2</code> may print the correct total every time; that proves nothing.</li>
+<li><strong>mutex:</strong> always 2000000, usually a bit slower than the unlocked version.</li>
+<li><strong>deadlock:</strong> prints nothing and never ends; <code>timeout 3</code> stops it after three seconds with exit status 124 (Ctrl+C also works).</li>
+<li><strong>deadlock_fixed</strong> and <strong>condvar:</strong> finish normally, with the output shown in sections 5 and 6 (in <code>deadlock_fixed</code>, A and B may print in either order).</li>
+</ul>
+<div class="note warn"><strong>ThreadSanitizer is not expected to work on Cygwin.</strong> The Clang documentation lists its supported platforms as Android, Darwin, FreeBSD, Linux and NetBSD; Cygwin is not among them. The report in section 3 came from Linux. Data races on Cygwin are found by reasoning, as in the animations above, or by running the same source on a Linux machine.</div>
+</section>
+
+<section id="s10">
+<h2>10. Function reference</h2>
+<div class="tw2"><table class="ref">
+<tr><th>Call</th><th>Purpose</th><th>Notes</th></tr>
+<tr><td><code>pthread_create</code></td><td>Start a thread running <code>start_routine(arg)</code></td><td>Returns 0 or an error number; <code>arg</code> must stay valid while the thread uses it</td></tr>
+<tr><td><code>pthread_join</code></td><td>Wait for a thread to terminate; collect its return value</td><td>Returns 0 or an error number</td></tr>
+<tr><td><code>pthread_exit</code></td><td>End the calling thread only</td><td>Equivalent to returning from the start routine</td></tr>
+<tr><td><code>pthread_mutex_lock</code> / <code>unlock</code></td><td>Enter and leave a critical section</td><td>Same thread locks and unlocks; every access to the shared data goes through it</td></tr>
+<tr><td><code>pthread_mutex_trylock</code></td><td>Lock if free; otherwise return an error at once</td><td>Does not wait; useful to avoid hold-and-wait</td></tr>
+<tr><td><code>pthread_cond_wait</code></td><td>Release the mutex and sleep until woken; re-lock before returning</td><td>Call inside a loop that tests the predicate</td></tr>
+<tr><td><code>pthread_cond_signal</code></td><td>Wake at least one waiting thread</td><td>No effect if none is waiting</td></tr>
+<tr><td><code>pthread_cond_broadcast</code></td><td>Wake all waiting threads</td><td>Each re-checks its predicate after waking</td></tr>
+</table></div>
+</section>
+
+<section id="s11">
+<h2>Word origins</h2>
+<p class="mu">Origins are taken from Etymonline (etymonline.com); meanings of technical terms follow POSIX.1-2024 and OSTEP where a source is named. Entries for initialisms and compounds explain their parts. A sentence added after a citation is this page’s own gloss, linking the old meaning to the computing use.</p>
+<dl id="gl"></dl>
+</section>
+
+<section id="s12">
+<h2>Sources</h2>
+<ul class="mu">
+<li>The Open Group, <em>POSIX.1-2024</em> (IEEE Std 1003.1-2024), Base Definitions chapter 3 (thread, process) and 4.15 (memory synchronization, data races); System Interfaces 2.9 (threads, thread-safety), <code>pthread_create</code>, <code>pthread_join</code>, <code>pthread_exit</code>, <code>pthread_mutex_lock</code>, <code>pthread_cond_wait</code>, <code>pthread_cond_signal</code>, <code>fork</code>: pubs.opengroup.org/onlinepubs/9799919799/</li>
+<li>Arpaci-Dusseau and Arpaci-Dusseau, <em>Operating Systems: Three Easy Pieces</em> (University of Wisconsin): chapters “Concurrency: An Introduction”, “Interlude: Thread API”, “Locks”, “Condition Variables”, “Common Concurrency Problems”: pages.cs.wisc.edu/~remzi/OSTEP/</li>
+<li>GNU Compiler Collection manual, the <code>-pthread</code> option: gcc.gnu.org/onlinedocs/gcc/</li>
+<li>Clang documentation, ThreadSanitizer (supported platforms, usage with <code>-fsanitize=thread</code>): clang.llvm.org/docs/ThreadSanitizer.html</li>
+<li>Word origins: Etymonline (etymonline.com)</li>
+<li>Program outputs: produced by compiling the listed programs with <code>gcc -std=gnu90</code> and running them on Linux (Ubuntu 24.04, GCC 13.3, 2 cores).</li>
+</ul>
+</section>
+</main>
+<div id="tip" hidden role="tooltip"></div>
+
+<script>
+/*ENGINE-START*/
+function mkM(progs){return{progs:progs,pc:progs.map(function(){return 0}),reg:progs.map(function(){return null}),own:{},counter:0}}
+function doneM(s,t){return s.pc[t]>=s.progs[t].length}
+function nextM(s,t){return doneM(s,t)?null:s.progs[t][s.pc[t]]}
+function blockedM(s,t){var o=nextM(s,t);return !!o&&o.op==="lock"&&s.own[o.m]!==undefined&&s.own[o.m]!==t}
+function canM(s,t){return !doneM(s,t)&&!blockedM(s,t)}
+function stepM(s,t){if(!canM(s,t))return false;var o=nextM(s,t);
+ if(o.op==="lock")s.own[o.m]=t;else if(o.op==="unlock")delete s.own[o.m];
+ else if(o.op==="load")s.reg[t]=s.counter;else if(o.op==="add")s.reg[t]=s.reg[t]+1;else if(o.op==="store")s.counter=s.reg[t];
+ s.pc[t]++;return true}
+function allDoneM(s){for(var t=0;t<s.progs.length;t++)if(!doneM(s,t))return false;return true}
+function stuckM(s){var any=false,run=false;for(var t=0;t<s.progs.length;t++)if(!doneM(s,t)){any=true;if(canM(s,t))run=true}return any&&!run}
+function simM(progs,rng){var s=mkM(progs);for(;;){var r=[],t;for(t=0;t<s.progs.length;t++)if(canM(s,t))r.push(t);if(!r.length)break;stepM(s,r[Math.floor(rng()*r.length)])}return{counter:s.counter,dead:stuckM(s)}}
+function opL(o){return o.op==="lock"?"pthread_mutex_lock(&"+o.m+");":o.op==="unlock"?"pthread_mutex_unlock(&"+o.m+");":o.op==="load"?"r = counter;     /* LOAD  */":o.op==="add"?"r = r + 1;       /* ADD   */":"counter = r;     /* STORE */"}
+function prog(a){return a.map(function(x){var p=x.split(":"),o={op:p[0],m:p[1]};o.l=opL(o);return o})}
+function cntProgs(lock){var a=["load","add","store"];if(lock)a=["lock:lock"].concat(a,["unlock:lock"]);return[prog(a),prog(a)]}
+function deadProgs(fixed){return[prog(["lock:m1","lock:m2","unlock:m2","unlock:m1"]),prog(fixed?["lock:m1","lock:m2","unlock:m2","unlock:m1"]:["lock:m2","lock:m1","unlock:m1","unlock:m2"])]}
+/* condition variable model: thread 0 = producer P, thread 1 = consumer C */
+function nmC(t){return t===0?"P":"C"}
+function mkC(bug){return{own:-1,full:false,box:0,pc:[0,0],sl:[false,false],wk:[false,false],n:[1,1],log:[],bug:!!bug,msg:""}}
+function doneC(s,t){return s.pc[t]>=6}
+function canC(s,t){if(doneC(s,t)||s.sl[t])return false;if((s.wk[t]||s.pc[t]===0)&&s.own!==-1&&s.own!==t)return false;return true}
+function stepC(s,t){if(!canC(s,t))return false;var o=1-t,c;
+ if(s.wk[t]){s.own=t;s.wk[t]=false;s.pc[t]=s.bug?3:1;s.msg=nmC(t)+" wakes up and re-acquires the mutex"+(s.bug?", then goes straight on without re-checking (the if bug)":", then re-checks the condition");return true}
+ if(s.pc[t]===0){s.own=t;s.pc[t]=1;s.msg=nmC(t)+" locks the mutex"}
+ else if(s.pc[t]===1){c=t===0?s.full:!s.full;s.pc[t]=c?2:3;s.msg=nmC(t)+" checks "+(t===0?"full":"!full")+": "+(c?"true, so it must wait":"false, so it can go on")}
+ else if(s.pc[t]===2){s.own=-1;s.sl[t]=true;s.msg=nmC(t)+" waits: the mutex is released and the thread sleeps"}
+ else if(s.pc[t]===3){
+  if(t===0){if(s.full){s.log.push("put  "+s.n[0]+"   (overwrites an unread item: BUG)");s.msg="P puts "+s.n[0]+" into a FULL box, destroying the item inside"}else{s.log.push("put  "+s.n[0]);s.msg="P puts "+s.n[0]+" into the box"}s.box=s.n[0];s.full=true}
+  else{if(s.full){s.log.push("took "+s.box);s.msg="C takes "+s.box+" out of the box"}else{s.log.push("took from an EMPTY box (BUG)");s.msg="C takes from an EMPTY box: there is nothing to take"}s.full=false}
+  s.pc[t]=4}
+ else if(s.pc[t]===4){if(s.sl[o]){s.sl[o]=false;s.wk[o]=true;s.msg=nmC(t)+" signals: "+nmC(o)+" is woken (it still needs the mutex)"}else{s.msg=nmC(t)+" signals: nobody is waiting, so nothing happens"}s.pc[t]=5}
+ else{s.own=-1;s.n[t]++;s.pc[t]=s.n[t]>5?6:0;s.msg=nmC(t)+" unlocks the mutex"+(s.pc[t]===6?" and is finished":"")}
+ return true}
+function spurC(s,t){if(!s.sl[t])return false;s.sl[t]=false;s.wk[t]=true;s.msg="Spurious wakeup: "+nmC(t)+" wakes although nobody signaled";return true}
+function stuckC(s){var any=false,run=false;for(var t=0;t<2;t++)if(!doneC(s,t)){any=true;if(canC(s,t))run=true}return any&&!run}
+function allDoneC(s){return doneC(s,0)&&doneC(s,1)}
+/* strtok model */
+function tokNext(st){var s=st.s,i=st.pos,j;while(i<s.length&&s.charAt(i)===" ")i++;if(i>=s.length){st.pos=i;return null}j=i;while(j<s.length&&s.charAt(j)!==" ")j++;st.pos=j;return s.slice(i,j)}
+function tokSim(reent){var shared=null,own=[null,null],out=[[],[]],steps=[],calls=[[0,"one two three"],[1,"red green blue"],[0,null],[1,null],[0,null],[1,null]];
+ function rest(st){return st?st.s.slice(st.pos).replace(/^ +/,""):""}
+ calls.forEach(function(c){var t=c[0],r,name=reent?"strtok_r":"strtok",tail=reent?", &save"+(t+1):"";
+  if(reent){if(c[1]!==null)own[t]={s:c[1],pos:0};r=own[t]?tokNext(own[t]):null}else{if(c[1]!==null)shared={s:c[1],pos:0};r=shared?tokNext(shared):null}
+  out[t].push(r);steps.push({t:t,call:name+"("+(c[1]===null?"NULL":'"'+c[1]+'"')+', " "'+tail+")",ret:r,left:reent?[rest(own[0]),rest(own[1])]:[rest(shared)]})});
+ return{steps:steps,out:out}}
+/*ENGINE-END*/
+</script>
+<script>
+var E=Object.assign({},{"concurrent":["Overlapping in time; in progress during the same period. Textbook wording: a concurrent system supports more than one task making progress.","Late 14th century, “acting in conjunction, contributing to the same effect or event”, from Latin concurrere “to run together; clash”: con- “together” + currere “to run” (Etymonline, Oxford)."],"parallel":["Executing at the same instant. Pike: the simultaneous execution of (possibly related) computations.","Greek parallēlos “beside one another”, from para allēlois: para- “beside” + allēlois “each other”. In geometry (1540s): lines in the same plane that never meet (Etymonline)."],"core":["One CPU on a chip that executes instructions. A multicore processor packs several cores onto one chip (OSTEP).","Early 14th century, “heart or inmost part of anything” (especially an apple or pear); of uncertain origin, probably from Old French cor, coeur “core of fruit”, literally “heart”, from Latin cor “heart” (Etymonline). In a chip, the same image: its inmost working part."],"process":["An address space with one or more threads executing within it, plus the resources those threads need (POSIX).","Early 14th century, “fact of being carried on”, from Old French proces “a journey; continuation, development”, from Latin processus “a going forward, advance, progress”, from procedere “go forward”: pro “forward” + cedere “to go” (Etymonline)."],"thread":["A single flow of control within a process; many of the process’s resources are shared among its threads (POSIX).","Old English þræd “fine cord, especially when twisted”, from Proto-Germanic *thredu- “twisted yarn”; related to þrawan “to twist”, the source of throw. By the 1640s it was extended to “that which runs through the whole course of something” (Etymonline)."],"scheduler":["The part of the operating system that decides which ready process or thread runs next, and on which core.","schedule: late 14th century, “slip of paper with writing on it”, from Late Latin schedula “strip of paper”, diminutive of Latin scheda “one of the strips forming a papyrus sheet”, from Greek skhidē “splinter”; the sense “printed timetable” dates from 1863 (Etymonline). A scheduler is one who schedules: here, the part that draws up the timetable of what runs when."],"context":["A thread’s saved state, including its register values and program counter, which the OS saves and restores on a context switch (OSTEP).","Early 15th century, “a composition, the entire text of a writing”, from Latin contextus “a joining together”, from contexere “to weave together”: com “together” + texere “to weave” (Etymonline)."],"switch":["Changing which task a core runs.","1590s, “slender riding whip”, probably from a Flemish or Low German word akin to Middle Dutch swijch “bough, twig”. The sense “device for changing the direction of a moving body from one course to another” is attested by 1797, for horse-drawn railways (Etymonline)."],"preempt":["The OS takes the core away from a running job before the job is done, for example when its time slice ends.","pre-emption (c. 1600): “a purchase by one before an opportunity is offered to others”, from pre- “before” + emption “purchase”, from Latin emere “to buy”. The verb preempt (1830) is a back-formation; its broadcasting sense “set aside (a program) and replace it with another” (1965) is close to the OS meaning (Etymonline)."],"smt":["Simultaneous multithreading: one core handles two threads at the same time by sharing its execution resources (Intel’s name for it is Hyper-Threading).","simultaneous: 1650s, from Medieval Latin simultaneus, ultimately from Latin simul “at the same time”. multi-: from Latin multus “much, many”. thread: see thread (Etymonline)."],"logical":["What the operating system counts as one place to run a thread. With SMT, one physical core appears as two logical processors that share the core’s execution resources, so the pair is not equivalent to two separate cores. Example desktop PC: 16 cores, 32 logical processors.","Early 15th century, “based on reason”, from logic + -al; logic is from Greek logikē (technē) “the reasoning art”, from logikos “pertaining to speaking or reasoning”, from logos “reason, idea, word” (Etymonline). In this page’s usage, following Intel’s documentation, a logical processor is what the operating system sees, while a physical core is the hardware."],"cache":["A small, fast memory close to a core that holds copies of data from main memory (OSTEP).","1797, “hiding place”, from French Canadian trappers’ slang “hiding place for stores and provisions”, a back-formation from French cacher “to hide, conceal” (Etymonline). In computing, the same image: a store of data kept close at hand."],"synchronization":["Coordinating threads so shared data is accessed safely, typically with locks. OSTEP notes that as the number of CPUs grows, access to a synchronized shared structure becomes quite slow.","synchronize: 1620s, from Greek synkhronizein “be of the same time”, from synkhronos “happening at the same time”: syn- “together” + khronos “time” (Etymonline)."],"fork":["The system call that creates a new process. POSIX: the child is an exact copy of the caller, with a single thread.","Old English forca “pitchfork, forked instrument”, from Latin furca “two-pronged fork; pitchfork”. As a verb (early 14th century) it meant “to divide in branches, go separate ways”; of rivers it is attested from 1753 and of roads from 1839 (Etymonline)."],"pid":["Process ID: the number the operating system assigns to a process (Java: Process.pid() returns it).","identifier: 1870, an agent noun from identify (1640s, “regard as the same”), from identity, ultimately from Latin idem “the same”. process: see process (Etymonline)."],"cpu":["Central processing unit: the part of a computer that executes a program’s instructions.","An initialism for “central processing unit”; for the roots of its words, see processor."]},{
+"pthreads":["The thread interface of POSIX: functions such as pthread_create and pthread_join, declared in <pthread.h>.","Abbreviation of “POSIX threads”. POSIX stands for Portable Operating System Interface; for thread, see thread."],
+"memory":["The storage a running program reads and writes. All threads of a process see the same address space (POSIX).","Late 13th century, “recollection; remembrance, awareness or consciousness”, from Anglo-French memorie, Old French memoire, and directly from Latin memoria “memory, remembrance, faculty of remembering”, from memor “mindful, remembering” (Etymonline)."],
+"address":["A number that identifies one location in memory. An address space is the range of addresses a process can use; the threads of one process share it (POSIX: a process is an address space with one or more threads executing within it).","Early 14th century, “to guide, aim, direct”, from Old French adrecier “go straight toward; straighten, set right; point, direct”, from Vulgar Latin addirectiare, ultimately from Latin dirigere. The noun (1530s) came from the verb and French adresse (Etymonline). A memory address is where the program is directed to look."],
+"stack":["Memory a thread uses for its function calls and local variables. Each thread has its own stack, one of the per-thread resources POSIX lists.","c. 1300, “pile, heap, or group of things”, from a Scandinavian source related to Old Norse stakkr “haystack”, from Proto-Germanic; related to stake. In computing, of data, from 1960 (Etymonline)."],
+"heap":["Memory obtained while the program runs, for example with malloc(). POSIX: storage obtained via malloc() is accessible to all threads in the same process.","Old English hēap “pile (of things); great number, crowd, multitude (of persons)”, from West Germanic *haupaz, of uncertain origin (Etymonline)."],
+"register":["A tiny storage location inside a core. Arithmetic happens on register values: an increment of a variable reads it into a register, adds one, and writes it back. A thread’s registers are part of its saved context.","Late 14th century, “public record book, private account book, an official written account regularly kept”, from Old French, from Medieval Latin registrum, from Late Latin regesta, from Latin regerere “to carry back” (re- “back” + gerere “carry”) (Etymonline). A register is a place where a value is recorded."],
+"data":["Information that a program stores and works on. Shared data is the memory that several threads access.","1640s, “a fact given or granted”, classical plural of datum, from Latin datum “(thing) given”; originally “a fact given as the basis for calculation in mathematical problems”. The computing sense, “transmittable and storable information by which computer operations are performed”, is recorded by 1946 (Etymonline)."],
+"join":["Wait until another thread has terminated, and collect the value it returned (pthread_join).","c. 1300, from Old French joindre, from Latin iungere, “to unite (things) into a whole, combine, put or bring together”; iungere comes from a nasalized form of the Proto-Indo-European root *yeug- (Etymonline)."],
+"mutex":["A lock object: it lets one thread at a time hold it, so threads serialize their access to shared data. The name stands for mutual exclusion (POSIX glossary).","Contraction of “mutual exclusion”. mutual: late 15th century, “reciprocally given and received”, from Old French mutuel, from Latin mutuus “reciprocal, done in exchange”. exclusion: c. 1400, “act of shutting out”, from Latin exclusio, from excludere “keep out, shut out” (Etymonline)."],
+"lock":["Take a mutex so that other threads that try to take it must wait; unlock gives it back (pthread_mutex_lock, pthread_mutex_unlock).","Old English loc “bolt, appliance for fastening a door, lid, etc.”, from Proto-Germanic *lukana- “to close” (Etymonline)."],
+"wait":["Stop running until something happens: a thread waiting for a mutex or a condition does not use the core meanwhile.","c. 1200 waiten, “to watch with hostile intent, lie in wait for, plot against”, from Anglo-French and Old North French waitier “to watch”, from a Frankish or other Germanic source (Etymonline)."],
+"critical":["In “critical section”: a piece of code that accesses a shared resource and must not be run by more than one thread at a time (OSTEP).","1580s, “censorious, inclined to find fault”, from critic, via French critique and Latin criticus, from Greek kritikos “able to make judgments”, from krinein “to separate, decide” (Etymonline)."],
+"atomic":["Indivisible: no other thread can observe an atomic action half done. POSIX data-race rules separate atomic from non-atomic accesses; a plain counter++ is not atomic.","atom: late 15th century, from Latin atomus, from Greek atomos “uncut, unhewn; indivisible”. atomic: 1670s as a philosophical term, from atom + -ic (Etymonline)."],
+"race":["A situation where the result depends on the timing of the code’s execution, such as which thread gets to a variable first (OSTEP: race condition).","c. 1300, “an act of swift running, a hurried attack”; 1510s, “contest of speed involving two or more competitors”. From Old Norse rās and Old English ræs, from Proto-Germanic *res- (Etymonline)."],
+"datarace":["POSIX.1-2024 (4.15.1.1): conflicting accesses to one memory location by different threads, at least one not atomic, with neither ordered before the other. A program with a data race has undefined behavior.","Compound of data and race; see both."],
+"deadlock":["A state in which threads wait for one another forever, each holding something another needs. OSTEP lists four conditions: mutual exclusion, hold-and-wait, no preemption, circular wait.","1779, “complete standstill”, from dead (adj.), in its emphatic use, + lock (n.) (Etymonline)."],
+"condition":["In “condition variable”: an explicit queue that threads put themselves on when some state of execution is not as desired (OSTEP). POSIX: it lets threads suspend execution until a predicate on shared data is satisfied.","Mid-14th century condicioun, “particular mode of being of a person or thing”, from Old French condicion “stipulation; state; behavior; social status”, from Medieval Latin conditionem, ultimately from Latin condicio, properly “agreement; stipulation” (Etymonline)."],
+"predicate":["A true-or-false statement about shared data, such as “the box is full”. A wait on a condition variable re-checks it in a loop (POSIX).","Mid-15th century, a term in logic, “that which is said of a subject”, from Old French predicat and Medieval Latin predicatum, from Latin praedicatum, from praedicare “to publicly assert, proclaim” (prae- + dicare) (Etymonline)."],
+"spurious":["Describes a wakeup that happens although no thread signaled the condition. POSIX allows pthread_cond_wait to return spuriously, so the predicate is re-checked in a loop.","1590s, “born out of wedlock, bastard”, from Latin spurius “illegitimate, false”, from spurius (n.) “illegitimate child”, probably from Etruscan spural “public” (Etymonline)."],
+"signal":["In pthread_cond_signal: unblock at least one thread waiting on the condition variable. With no waiting thread it has no effect (POSIX). Unrelated to Unix signals such as SIGINT.","Late 14th century, “visible sign, indication”, from Old French signal, seignal, from Medieval Latin signale, from Late Latin signalis “used as a signal”, from Latin signum “identifying mark, sign” (Etymonline)."],
+"producer":["In the producer/consumer problem (OSTEP): the thread that puts items into a shared buffer.","Agent noun of produce, from Latin producere “lead or bring forth, draw out” (pro + ducere), early 15th century in English (Etymonline)."],
+"consumer":["In the producer/consumer problem (OSTEP): the thread that takes items out of the shared buffer.","Early 15th century, “one who squanders or wastes”, agent noun of consume, from Old French consumer and Latin consumere “to use up, eat, waste” (Etymonline)."],
+"threadsafe":["Describes a function that can be called by several threads at the same time without breaking (POSIX.1-2024, 2.9.1 Thread-Safety).","Compound of thread and safe. safe: c. 1300 sauf, “unscathed, unhurt, uninjured”, from Old French sauf, from Latin salvus “uninjured, in good health, safe” (Etymonline)."]
+});
+var $=function(id){return document.getElementById(id)};
+var tip=$("tip");
+function show(el){var d=E[el.dataset.k];if(!d)return;tip.innerHTML="<b>"+el.textContent+"</b>: "+d[0]+"<i>"+d[1]+"</i>";tip.hidden=false;var r=el.getBoundingClientRect(),x=Math.max(8,Math.min(r.left,innerWidth-tip.offsetWidth-8)),y=r.bottom+6;if(y+tip.offsetHeight>innerHeight-8)y=r.top-tip.offsetHeight-6;tip.style.left=x+"px";tip.style.top=Math.max(8,y)+"px"}
+function hide(){tip.hidden=true}
+function wire(el){el.tabIndex=0;el.onmouseenter=el.onfocus=function(){show(el)};el.onmouseleave=el.onblur=hide;el.onclick=function(){show(el)}}
+function wireAll(root){Array.prototype.forEach.call((root||document).querySelectorAll(".t"),wire)}
+wireAll();
+document.addEventListener("keydown",function(e){if(e.key==="Escape")hide()});
+var T=function(k,w){return "<span class='t' data-k='"+k+"'>"+w+"</span>"};
+var GL=["thread","process","pthreads","memory","address","stack","heap","register","data","fork","pid","core","cpu","scheduler","context","switch","preempt","smt","logical","cache","concurrent","parallel","synchronization","mutex","lock","critical","atomic","race","datarace","deadlock","join","wait","condition","predicate","spurious","signal","producer","consumer","threadsafe"];
+var gl="";GL.forEach(function(k){if(!E[k]){console.error("glossary key missing: "+k);return}gl+="<dt>"+k.replace("datarace","data race").replace("threadsafe","thread-safe")+"</dt><dd>"+E[k][0]+"<br><i>"+E[k][1]+"</i></dd>"});$("gl").innerHTML=gl;
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+
+/* ---------- 1. memory picture ---------- */
+(function(){var mode="thread",wrote=false,root=$("memdemo");
+function draw(){var xv=wrote?99:1,h='<div class="ctl"><label>Mode <select id="mm"><option value="fork"'+(mode==="fork"?" selected":"")+'>fork(): two processes</option><option value="thread"'+(mode==="thread"?" selected":"")+'>pthread_create(): two threads</option></select></label><button id="mw">Second flow writes x = 99</button><button id="mr">Reset</button></div>';
+ if(mode==="fork"){h+='<div class="pm">'+
+  '<div class="pb"><h4>Process A (parent)</h4><div class="seg">code</div><div class="seg">heap</div><div class="seg hot">global <b>x = 1</b></div><div class="seg">stack: 1 flow of control</div></div>'+
+  '<div class="pb"><h4>Process B (child, a copy)</h4><div class="seg">code</div><div class="seg">heap</div><div class="seg hot">global <b>x = '+xv+'</b></div><div class="seg">stack: 1 flow of control</div></div></div>';
+  h+='<div class="vd '+(wrote?"ok":"")+'">The first flow reads x and gets <b>1</b>. '+(wrote?"The write went to B’s own copy; A’s copy is untouched.":"Two separate copies of x exist.")+'</div>'}
+ else{h+='<div class="pb"><h4>One process</h4><div class="pm"><div class="seg">code</div><div class="seg">heap</div></div><div class="seg hot">global <b>x = '+xv+'</b> (one copy, visible to both threads)</div><div class="stks"><div class="seg s0">stack of thread 1<br>its own locals</div><div class="seg s1">stack of thread 2<br>its own locals</div></div></div>';
+  h+='<div class="vd '+(wrote?"bad":"")+'">The first flow reads x and gets <b>'+xv+'</b>. '+(wrote?"One copy of x: the write by thread 2 is visible to thread 1. Cheap to share, and the reason rules are needed.":"Only one copy of x exists.")+'</div>'}
+ root.innerHTML=h;
+ $("mm").onchange=function(){mode=this.value;wrote=false;draw()};$("mw").onclick=function(){wrote=true;draw()};$("mr").onclick=function(){wrote=false;draw()}}
+draw()})();
+
+/* ---------- 2.1 create/join timeline ---------- */
+(function(){var runs=[{n:"Order 0, 1, 2 (297 of 300 runs)",o:[0,1,2]},{n:"Order 0, 2, 1 (2 of 300 runs)",o:[0,2,1]},{n:"Order 2, 0, 1 (1 of 300 runs)",o:[2,0,1]}],ri=0,shown=0,timer=null,root=$("tldemo");
+function events(o){var e=[],k;for(k=0;k<3;k++)e.push({c:0,t:"pthread_create(&tid["+k+"], …)",birth:k+1,cls:"m"});
+ e.push({c:0,t:"pthread_join(tid[0]) … waits",cls:"w"});
+ o.forEach(function(k){e.push({c:k+1,t:"printf “hello from thread "+k+"”; return",death:k+1})});
+ e.push({c:0,t:"joins return; printf “all threads finished”",cls:"m"});return e}
+function draw(){var ev=events(runs[ri].o),h='<div class="ctl"><label>Order <select id="tr">',i,c;
+ runs.forEach(function(r,k){h+='<option value="'+k+'"'+(k===ri?" selected":"")+">"+r.n+"</option>"});
+ h+='</select></label><button id="ts">Step</button><button id="tp">'+(timer?"Pause":"Play")+'</button><button id="tz">Reset</button></div><div class="tw"><div class="tg"><div class="hd">main</div><div class="hd">thread 0</div><div class="hd">thread 1</div><div class="hd">thread 2</div>';
+ var birth=[null,null,null,null],death=[null,null,null,null];
+ ev.forEach(function(e,j){if(e.birth)birth[e.birth]=j;if(e.death)death[e.death]=j});
+ for(i=0;i<Math.min(shown,ev.length);i++){for(c=0;c<4;c++){var alive=c>0&&birth[c]!==null&&birth[c]<i+0&&(death[c]===null||i<=death[c]);
+   var cls=alive?"al":"";h+='<div class="'+cls+'">'+(ev[i].c===c?'<span class="ch '+(ev[i].cls||"")+'">'+esc(ev[i].t)+"</span>":"")+"</div>"}}
+ h+='</div></div><p class="cap">Shaded lanes show a thread that exists. This is one simplified timeline: thread bodies may also run while main is still creating threads, and the lines may appear in other orders, as in the real runs.</p>';
+ root.innerHTML=h;
+ $("tr").onchange=function(){ri=+this.value;stop();shown=0;draw()};$("ts").onclick=function(){stepOne()};$("tz").onclick=function(){stop();shown=0;draw()};
+ $("tp").onclick=function(){if(timer){stop();draw();return}if(shown>=ev.length)shown=0;timer=setInterval(stepOne,900);draw()}}
+function stop(){if(timer){clearInterval(timer);timer=null}}
+function stepOne(){var n=events(runs[ri].o).length;if(shown<n)shown++;if(shown>=n)stop();draw()}
+draw()})();
+
+/* ---------- 2.2 argument pitfall ---------- */
+(function(){var bug=true,st=0,root=$("argdemo");
+function draw(){var h='<div class="ctl"><label>Code <select id="am"><option value="1"'+(bug?" selected":"")+'>pthread_create(…, &amp;i)  (bug)</option><option value="0"'+(bug?"":" selected")+'>pthread_create(…, &amp;ids[i])  (as in the program)</option></select></label><button id="an">Next step</button><button id="ar">Reset</button></div>';
+ var vals=bug?[[0],[1],[2],[3],[3]]:[[0],[0,1],[0,1,2],[0,1,2],[0,1,2]],cur=vals[st],cells="",i,txt=["Start of the loop.","Thread 0 was created with its argument pointing at "+(bug?"i":"ids[0]")+".","Thread 1 was created, also with its argument pointing at "+(bug?"i":"ids[1]")+".","The loop is over."+(bug?" i++ made it 3, and the test failed.":" Every slot still holds its own number."),"The threads finally run and read *arg."];
+ txt[0]="i = 0: thread 0 is created."+(bug?" Its argument is the address of i.":" Its argument is the address of ids[0].");txt[1]="i = 1: thread 1 is created."+(bug?" Its argument is the address of the same i.":" Its argument is ids[1], a different slot.");txt[2]="i = 2: thread 2 is created.";
+ if(bug){cells='<div class="cell" style="max-width:150px"><span>i</span><b>'+cur[0]+'</b></div>'}else{for(i=0;i<3;i++)cells+='<div class="cell"><span>ids['+i+']</span><b>'+(i<cur.length?cur[i]:"–")+"</b></div>"}
+ var th="";for(i=0;i<3;i++){var seen=st===4?(bug?3:i):null;th+='<div class="seg s'+(i%2)+'" style="flex:1 1 120px">thread '+i+'<br>arg → '+(bug?"i":"ids["+i+"]")+(st>=i&&st<4?" (created)":st<i?" (not yet created)":"")+(seen!==null?'<br>reads <b>'+seen+"</b>":"")+"</div>"}
+ h+='<div style="display:flex;gap:10px;flex-wrap:wrap">'+cells+'</div><div class="stks" style="margin-top:8px">'+th+'</div><p class="msg">'+txt[st]+'</p>';
+ h+='<div class="vd '+(st===4?(bug?"bad":"ok"):"")+'">'+(st===4?(bug?"All three threads print <b>3</b>. This is one possible outcome; the result depends on timing, so another run could print other numbers. The only safe reading is that the value is unreliable.":"The threads print <b>0, 1, 2</b>, whatever the timing."):"Step through to the end to see what the threads read.")+"</div>";
+ root.innerHTML=h;$("am").onchange=function(){bug=this.value==="1";st=0;draw()};$("an").onclick=function(){if(st<4)st++;draw()};$("ar").onclick=function(){st=0;draw()}}
+draw()})();
+
+/* ---------- generic model demo (race, mutex, deadlock) ---------- */
+function rngSeed(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function modelDemo(c){var root=$(c.root),vi=0,s=mkM(c.variants[0].progs()),timer=null,pi=0,msg="Press a Step button to let that thread run one step.",res="";
+function owner(m){return s.own[m]}
+function verdict(){if(allDoneM(s))return c.kind==="counter"?{k:s.counter===2?"ok":"bad",t:"Both threads finished. counter = <b>"+s.counter+"</b>, expected <b>2</b>. "+(s.counter===2?"Correct this time.":"One increment was lost.")}:{k:"ok",t:"Both threads finished. No deadlock."};
+ if(stuckM(s)){var w=[];for(var t=0;t<2;t++)if(!doneM(s,t)){var o=nextM(s,t);w.push("T"+(t+1)+" waits for "+o.m+" (held by T"+(owner(o.m)+1)+")")}return{k:"bad",t:"<b>DEADLOCK.</b> "+w.join(", and ")+". Neither can ever continue."}}
+ return{k:"",t:"Running."}}
+function graph(){var P={T1:[40,30],T2:[40,130],m1:[250,30],m2:[250,130]},h='<svg class="wg" viewBox="0 0 300 160" role="img" aria-label="Who holds and who wants each lock"><defs><marker id="ah'+c.root+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>',t,m;
+ function line(a,b,col,dash){var A=P[a],B=P[b],dx=B[0]-A[0],dy=B[1]-A[1],L=Math.sqrt(dx*dx+dy*dy),ux=dx/L,uy=dy/L;return '<line x1="'+(A[0]+ux*26)+'" y1="'+(A[1]+uy*16)+'" x2="'+(B[0]-ux*30)+'" y2="'+(B[1]-uy*18)+'" stroke="'+col+'" stroke-width="2.5"'+(dash?' stroke-dasharray="6 4"':"")+' style="color:'+col+'" marker-end="url(#ah'+c.root+')"/>'}
+ ["m1","m2"].forEach(function(m){if(owner(m)!==undefined)h+=line(m,"T"+(owner(m)+1),"var(--c)",false)});
+ for(t=0;t<2;t++)if(blockedM(s,t))h+=line("T"+(t+1),nextM(s,t).m,"var(--b)",true);
+ Object.keys(P).forEach(function(k){var isT=k.charAt(0)==="T",held=!isT&&owner(k)!==undefined;h+='<rect x="'+(P[k][0]-26)+'" y="'+(P[k][1]-16)+'" width="52" height="32" rx="4" fill="'+(held?"var(--hi)":"var(--pn)")+'" stroke="'+(isT?(k==="T1"?"var(--a)":"var(--b)"):"var(--c)")+'" stroke-width="2.5"/><text x="'+P[k][0]+'" y="'+(P[k][1]+4)+'" text-anchor="middle">'+k+"</text>"});
+ return h+'</svg><p class="cap" style="text-align:center">Amber arrow: lock held by thread. Dashed pink: thread waits for lock.</p>'}
+function draw(){var h='<div class="ctl">',t,i;
+ if(c.variants.length>1){h+='<label>'+c.selLabel+' <select id="'+c.root+'v">';c.variants.forEach(function(v,k){h+='<option value="'+k+'"'+(k===vi?" selected":"")+">"+v.label+"</option>"});h+="</select></label>"}
+ h+='<button id="'+c.root+'0">Step T1</button><button id="'+c.root+'1">Step T2</button><button id="'+c.root+'p">'+(timer?"Stop":c.presetLabel)+'</button><button id="'+c.root+'r">Reset</button><button id="'+c.root+'x">1000 random schedules</button></div><div class="cols">';
+ for(t=0;t<2;t++){var cols="";s.progs[t].forEach(function(o,k){var cls=k<s.pc[t]?"dn":(k===s.pc[t]?"cur"+(blockedM(s,t)?" bl":""):"");cols+='<li class="'+cls+'">'+esc(o.l)+"</li>"});
+  var stt=doneM(s,t)?"finished":(blockedM(s,t)?"blocked: lock held by T"+(owner(nextM(s,t).m)+1):"ready");
+  var half=t===0?"":"";h+='<div class="th th'+t+'" style="grid-column:'+(t===0?1:3)+';grid-row:1"><h4>Thread '+(t+1)+"</h4><ol>"+cols+"</ol>"+(c.counter?'<div class="rg">r = <b>'+(s.reg[t]===null?"–":s.reg[t])+"</b></div>":"")+'<div class="stt">'+stt+"</div></div>"}
+ h+='<div class="mem" style="grid-column:2;grid-row:1">';
+ if(c.counter)h+='<div class="cell"><span>counter (shared)</span><b>'+s.counter+"</b></div>";
+ c.locks.forEach(function(m){var o=owner(m);h+='<div class="lk'+(o!==undefined?" held":"")+'">'+m+": "+(o===undefined?"free":"held by T"+(o+1))+"</div>"});
+ if(c.graph)h+=graph();
+ h+="</div></div>";
+ var v=verdict();h+='<p class="msg">'+msg+'</p><div class="vd '+v.k+'">'+v.t+"</div>"+(res?'<div class="vd">'+res+"</div>":"");
+ root.innerHTML=h;
+ for(t=0;t<2;t++)(function(t){$(c.root+t).onclick=function(){stopT();act(t)}})(t);
+ $(c.root+"r").onclick=function(){stopT();reset()};$(c.root+"x").onclick=function(){stopT();rand()};$(c.root+"p").onclick=function(){if(timer){stopT();draw();return}reset();pi=0;timer=setInterval(function(){if(pi>=c.seq.length||allDoneM(s)||stuckM(s)){stopT();draw();return}act(c.seq[pi++])},850);draw()};
+ if($(c.root+"v"))$(c.root+"v").onchange=function(){vi=+this.value;stopT();reset()}}
+function stopT(){if(timer){clearInterval(timer);timer=null}}
+function reset(){s=mkM(c.variants[vi].progs());msg="Press a Step button to let that thread run one step.";res="";draw()}
+function act(t){var o=nextM(s,t),n="T"+(t+1);if(!o){msg=n+" has already finished.";draw();return}
+ if(blockedM(s,t)){msg=n+" tries <code>"+esc(o.l)+"</code> but "+o.m+" is held by T"+(owner(o.m)+1)+": "+n+" has to wait, nothing happens."}
+ else{stepM(s,t);msg=n+" ran <code>"+esc(o.l.replace(/\s+\/\*.*$/,""))+"</code>"+(o.op==="load"?" and now has r = "+s.reg[t]:o.op==="add"?" so r = "+s.reg[t]:o.op==="store"?", so counter is now "+s.counter:"")+"."}
+ draw()}
+function rand(){var N=1000,cnt={},rng=rngSeed(12345),i,k;for(i=0;i<N;i++){var r=simM(c.variants[vi].progs(),rng);k=r.dead?"deadlock":"counter = "+r.counter;cnt[k]=(cnt[k]||0)+1}
+ var parts=Object.keys(cnt).sort().map(function(k){return k+": <b>"+cnt[k]+"</b>"});res="1000 random schedules of this model: "+parts.join(", ")+". The model treats each step as indivisible and picks the next runnable thread at random; it illustrates the rules and is not a hardware measurement.";draw()}
+draw()}
+modelDemo({root:"racedemo",kind:"counter",counter:true,locks:[],variants:[{label:"two threads, no lock",progs:function(){return cntProgs(false)}}],selLabel:"",presetLabel:"Play the bad order",seq:[0,1,0,1,0,1]});
+modelDemo({root:"mutexdemo",kind:"counter",counter:true,locks:["lock"],variants:[{label:"two threads, one mutex",progs:function(){return cntProgs(true)}}],selLabel:"",presetLabel:"Play the same bad order",seq:[0,1,0,1,0,1,0,1,0,1,1,1,1,1]});
+modelDemo({root:"deaddemo",kind:"dead",counter:false,graph:true,locks:["m1","m2"],variants:[{label:"T2 takes m2 first (deadlock.c)",progs:function(){return deadProgs(false)}},{label:"T2 takes m1 first (deadlock_fixed.c)",progs:function(){return deadProgs(true)}}],selLabel:"Lock order of T2",presetLabel:"Both take their first lock",seq:[0,1,0,1,0,1,0,1,1,1,1,1]});
+/* race bars */
+(function(){var sets=[["-O0",[1254827,1081192,1021398,1019392,1038203]],["-O2",[2000000,2000000,2000000,2000000,2000000]]],h="";
+ sets.forEach(function(S){S[1].forEach(function(v,i){h+='<div class="r"><span class="l">'+S[0]+" run "+(i+1)+'</span><div class="tr"><div class="f'+(v===2000000?" ok":"")+'" style="width:'+(v/2000000*100)+'%"></div><i class="mk"></i></div><span class="n">'+v.toLocaleString("en-US")+"</span></div>"})});
+ $("racebars").innerHTML=h+'<p class="cap">Bar length is the printed total; the dashed mark is the expected 2,000,000. Green: correct. Pink: updates were lost.</p>'})();
+
+/* ---------- 6. condition variable ---------- */
+(function(){var s=mkC(false),root=$("cvdemo"),timer=null,usebug=false,P=["pthread_mutex_lock(&m);","while (full)","    pthread_cond_wait(&can_put, &m);","box = i; full = 1;   /* put */","pthread_cond_signal(&can_take);","pthread_mutex_unlock(&m);"],C=["pthread_mutex_lock(&m);","while (!full)","    pthread_cond_wait(&can_take, &m);","take box; full = 0;  /* took */","pthread_cond_signal(&can_put);","pthread_mutex_unlock(&m);"];
+function code(t){var L=t===0?P:C,h="<ol>",i;for(i=0;i<L.length;i++){var cls=s.pc[t]>5?"dn":(i===s.pc[t]&&!s.wk[t]?"cur":"");var txt=esc(L[i]);if(usebug&&i===1)txt=txt.replace("while","if");h+='<li class="'+cls+'">'+txt+"</li>"}return h+"</ol>"}
+function stt(t){return doneC(s,t)?"finished":s.sl[t]?'<span class="sl">asleep</span> waiting on '+(t===0?"can_put":"can_take"):s.wk[t]?"woken: needs the mutex"+(s.own!==-1&&s.own!==t?" (held by "+nmC(s.own)+")":""):(s.pc[t]===0&&s.own!==-1&&s.own!==t?"blocked: mutex held by "+nmC(s.own):"ready")}
+function draw(){var h='<div class="ctl"><button id="cp">Step P (producer)</button><button id="cc">Step C (consumer)</button><button id="cr">'+(timer?"Stop":"Run in random order")+'</button><button id="cs">Spurious wakeup</button><label><input type="checkbox" id="cb"'+(usebug?" checked":"")+'> use <code>if</code> instead of <code>while</code> (bug)</label><button id="cz">Reset</button></div><div class="cv">';
+ h+='<div class="th th0"><h4>P: producer, puts 1 to 5</h4>'+code(0)+'<div class="stt">'+stt(0)+"</div></div>";
+ h+='<div class="mem"><div class="cell"><span>box'+(s.full?" (full)":" (empty)")+'</span><b>'+(s.full?s.box:"–")+'</b></div><div class="lk'+(s.own!==-1?" held":"")+'">mutex m: '+(s.own===-1?"free":"held by "+nmC(s.own))+'</div><div class="logb">'+(s.log.length?esc(s.log.join("\n")).replace(/\n/g,"<br>"):"output log")+"</div></div>";
+ h+='<div class="th th1"><h4>C: consumer, takes 5 items</h4>'+code(1)+'<div class="stt">'+stt(1)+"</div></div></div>";
+ var v;if(allDoneC(s)){var bad=s.log.some(function(x){return x.indexOf("BUG")>=0});v={k:bad?"bad":"ok",t:bad?"Finished, but with errors in the log: the condition was not re-checked.":"Finished: five items put, five items taken, in order."}}else if(stuckC(s)){v={k:"bad",t:"<b>STUCK.</b> No thread can run. "+(s.log.some(function(x){return x.indexOf("BUG")>=0})?"The log shows why: an item was taken that did not exist, so the consumer now waits for one more item than will ever be produced.":"")}}else v={k:"",t:"Running."};
+ h+='<p class="msg">'+(s.msg||"Step either thread. The consumer may go first: it finds the box empty and sleeps.")+'</p><div class="vd '+v.k+'">'+v.t+"</div>";
+ root.innerHTML=h;
+ $("cp").onclick=function(){stopT();go(0)};$("cc").onclick=function(){stopT();go(1)};
+ $("cs").onclick=function(){stopT();if(!spurC(s,1)&&!spurC(s,0))s.msg="Nobody is asleep, so there is nobody to wake spuriously.";draw()};
+ $("cb").onchange=function(){usebug=this.checked;stopT();reset()};$("cz").onclick=function(){stopT();reset()};
+ $("cr").onclick=function(){if(timer){stopT();draw();return}timer=setInterval(function(){var r=[],t;for(t=0;t<2;t++)if(canC(s,t))r.push(t);if(Math.random()<0.12&&(s.sl[0]||s.sl[1])){spurC(s,s.sl[1]?1:0);draw();return}if(!r.length||allDoneC(s)){stopT();draw();return}stepC(s,r[Math.floor(Math.random()*r.length)]);draw()},650);draw()}}
+function stopT(){if(timer){clearInterval(timer);timer=null}}
+function reset(){s=mkC(usebug);draw()}
+function go(t){if(!stepC(s,t)){s.msg=doneC(s,t)?nmC(t)+" has finished.":s.sl[t]?nmC(t)+" is asleep and cannot run until it is signaled.":nmC(t)+" is blocked: the mutex is held by "+nmC(s.own)+"."}draw()}
+draw()})();
+
+/* ---------- 7. lifetime ---------- */
+(function(){var join=true,t=0,timer=null,root=$("ltdemo");
+function draw(){var W=100,mainWork=40,mEnd=join?W:mainWork,wEnd=join?W:mainWork,h='<div class="ctl"><label>main ends with <select id="lj"><option value="1"'+(join?" selected":"")+'>pthread_join(worker); return 0;</option><option value="0"'+(join?"":" selected")+'>return 0;  (no join)</option></select></label><button id="lp">'+(timer?"Pause":"Play")+'</button><button id="lr">Reset</button></div><label class="ctl">time <input type="range" id="ls" min="0" max="100" value="'+t+'"></label>';
+ var mb=Math.min(t,mainWork),mw=join&&t>mainWork?Math.min(t,W)-mainWork:0,wb=Math.min(t,wEnd),mDone=t>=mEnd,wCut=!join&&t>=mainWork;
+ h+='<div class="row"><span>main</span><div class="tk"><div class="bar" style="width:'+mb+'%;background:var(--a)"></div>'+(mw?'<div class="bar wt" style="left:'+mainWork+'%;width:'+mw+'%"></div>':"")+"</div></div>";
+ h+='<div class="row"><span>worker</span><div class="tk"><div class="bar" style="width:'+wb+'%;background:var(--b)"></div>'+(wCut?'<span class="x" style="left:calc('+mainWork+'% - 6px)">✕</span>':"")+"</div></div>";
+ var vt,vk="";if(join){vt=t<mainWork?"main is still working; the worker runs alongside.":t<W?"main reached pthread_join and waits (hatched). The process stays alive.":"The worker finished, join returned, then main returned. The worker’s whole job was done.";vk=t>=W?"ok":""}
+ else{vt=t<mainWork?"main is still working; the worker runs alongside.":"main returned: the process ends and the worker is stopped at ✕ with about 60% of its job undone. Whether its last printf ever appears is not defined.";vk=t>=mainWork?"bad":""}
+ h+='<div class="vd '+vk+'">'+vt+"</div><p class='cap'>Illustration with made-up proportions: the worker needs 100 time units, main needs 40 before its last statement.</p>";
+ root.innerHTML=h;$("lj").onchange=function(){join=this.value==="1";t=0;stopT();draw()};$("ls").oninput=function(){t=+this.value;stopT();draw()};$("lr").onclick=function(){t=0;stopT();draw()};
+ $("lp").onclick=function(){if(timer){stopT();draw();return}if(t>=100)t=0;timer=setInterval(function(){t=Math.min(100,t+2);if(t>=100)stopT();draw()},80);draw()}}
+function stopT(){if(timer){clearInterval(timer);timer=null}}
+draw()})();
+
+/* ---------- 8. strtok ---------- */
+(function(){var re=false,k=0,root=$("tokdemo");
+function draw(){var sim=tokSim(re),h='<div class="ctl"><label>Function <select id="tk"><option value="0"'+(re?"":" selected")+'>strtok (one hidden position for all callers)</option><option value="1"'+(re?" selected":"")+'>strtok_r (each thread has its own saveptr)</option></select></label><button id="tn">Next call</button><button id="tz2">Reset</button></div>',i,t;
+ h+='<div class="tw2"><table class="ref"><tr><th>#</th><th>Thread</th><th>Call</th><th>Returns</th><th>Position left after the call</th></tr>';
+ for(i=0;i<k;i++){var S=sim.steps[i];h+="<tr><td>"+(i+1)+"</td><td>T"+(S.t+1)+"</td><td><code>"+esc(S.call)+"</code></td><td>"+(S.ret===null?"NULL":"“"+esc(S.ret)+"”")+"</td><td>"+S.left.map(function(x,j){return(S.left.length>1?"T"+(j+1)+": ":"shared: ")+"“"+esc(x)+"”"}).join("; ")+"</td></tr>"}
+ if(!k)h+='<tr><td colspan="5">T1 and T2 take turns: T1 starts splitting “one two three”, T2 starts splitting “red green blue”, then each asks for its next word.</td></tr>';
+ h+="</table></div>";
+ if(k>=sim.steps.length){var exp=[["one","two","three"],["red","green","blue"]];h+='<div class="tkn">';for(t=0;t<2;t++){var out=sim.out[t].filter(function(x,j){return j>0||true}),bad=false;var got=[];sim.steps.forEach(function(S){if(S.t===t)got.push(S.ret)});got.forEach(function(g,j){if(g!==exp[t][j])bad=true});
+  h+='<div class="vd '+(bad?"bad":"ok")+'">T'+(t+1)+" received: "+got.map(function(g,j){return'<span class="'+(g!==exp[t][j]?"bad":"")+'">'+(g===null?"NULL":esc(g))+"</span>"}).join(", ")+"<br>expected: "+exp[t].map(function(g){return g===null?"NULL":g}).join(", ")+"</div>"}h+="</div>"}
+ root.innerHTML=h;$("tk").onchange=function(){re=this.value==="1";k=0;draw()};$("tn").onclick=function(){if(k<6)k++;draw()};$("tz2").onclick=function(){k=0;draw()}}
+draw()})();
+
+/* ---------- sidebar ---------- */
+(function(){var nav=$("nav"),b=$("burger"),links=Array.prototype.slice.call(nav.querySelectorAll("a[href^='#']"));
+b.onclick=function(){var o=nav.classList.toggle("open");b.setAttribute("aria-expanded",o)};
+links.forEach(function(a){a.addEventListener("click",function(){nav.classList.remove("open");b.setAttribute("aria-expanded","false")})});
+if(!("IntersectionObserver" in window))return;
+var map={};links.forEach(function(a){map[a.getAttribute("href").slice(1)]=a});
+var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){links.forEach(function(a){a.classList.remove("on")});var a=map[e.target.id];if(a)a.classList.add("on")}})},{rootMargin:"-10% 0px -80% 0px"});
+Object.keys(map).forEach(function(id){var el=document.getElementById(id);if(el)io.observe(el)})})();
+</script></body></html>

@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leader Funnel</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--ink:#1b1f24;--mute:#5f6873;--line:#dde1e6;--grid:#eceef1;--code:#fbfbfc;--hl:#fff3c4;
+  --leader:#3b4250;--w1:#2a78d6;--w2:#eb6834;--w3:#1baf7a;--w4:#eda100;--w5:#e87ba4;--w6:#008300;
+  --accent:#6250d6;--good:#1f9d55;--bad:#d64545;--idle:#c9ced6;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--line:#2d3238;--grid:#23272c;--code:#15181b;--hl:#3b3420;
+  --leader:#c3c8d0;--w1:#3987e5;--w2:#d95926;--w3:#199e70;--w4:#c98500;--w5:#d55181;--w6:#008300;
+  --accent:#9085e9;--good:#4cc38a;--bad:#ff6b6b;--idle:#3a4048;
+}}
+:root[data-theme="dark"]{
+  --bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--line:#2d3238;--grid:#23272c;--code:#15181b;--hl:#3b3420;
+  --leader:#c3c8d0;--w1:#3987e5;--w2:#d95926;--w3:#199e70;--w4:#c98500;--w5:#d55181;--w6:#008300;
+  --accent:#9085e9;--good:#4cc38a;--bad:#ff6b6b;--idle:#3a4048;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 2px} h2{font-size:16px;margin:0 0 6px}
+h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:12px 0 6px}
+p{margin:0 0 8px} code{font-family:Consolas,"Cascadia Mono",monospace;font-size:.92em}
+a{color:var(--w1)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:14px}
+.muted{color:var(--mute)} .small{font-size:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.lbl{font-size:12px;color:var(--mute);margin-right:2px}
+.sql{background:#0d1117;color:#d2d8de;border-radius:8px;padding:8px 10px;font:13px/1.45 Consolas,monospace;white-space:pre;overflow-x:auto;margin:0}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.qdesc{min-height:40px}
+/* stage */
+.stage{display:grid;grid-template-columns:250px 1fr 210px;gap:14px;align-items:start}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px}
+.box h4{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.blocks{display:grid;grid-template-columns:repeat(12,1fr);gap:3px}
+.blk{aspect-ratio:1;border-radius:3px;background:var(--grid);border:1px solid var(--line)}
+.blk.cur{background:transparent;border:2px solid var(--pc)}
+.blk.done{background:var(--pc);opacity:.45;border-color:transparent}
+.procs{display:flex;flex-direction:column;gap:8px}
+.proc{border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center}
+.proc.leader{border-width:2px;border-color:var(--leader)}
+.proc .nm{font-weight:600;display:flex;align-items:center;gap:6px}
+.st{font-size:12px}
+.st.wait{color:var(--bad);font-weight:600}
+.st.scan{color:var(--good)}
+.st.fwd{color:var(--accent);font-weight:600}
+.q{display:flex;gap:3px}
+.q i{width:14px;height:14px;border-radius:3px;border:1px solid var(--line);display:inline-block}
+.q i.f{background:var(--pc);border-color:var(--pc)}
+.flow{font-size:12px;color:var(--accent);min-width:16px;font-weight:700}
+.funnel{text-align:center;color:var(--mute);font-size:12px;margin:2px 0}
+.mix{height:12px;border-radius:4px;overflow:hidden;display:flex;background:var(--grid);margin-top:4px}
+.mix span{height:100%}
+.big{font:600 26px/1.1 Consolas,monospace}
+.bar{height:10px;border-radius:5px;background:var(--grid);overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;background:var(--good)}
+.clock{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.stat .v{font:600 20px/1.1 Consolas,monospace}
+.stat .l{font-size:11px;color:var(--mute)}
+.verdict{margin-top:10px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);display:none}
+/* chart */
+.chartwrap{position:relative}
+svg text{font-family:"Segoe UI",system-ui,sans-serif}
+.term{border-bottom:1px dotted var(--mute);cursor:help}
+.term:focus{outline:2px solid var(--accent);outline-offset:1px;border-radius:2px}
+.sql .term{border-bottom-color:#8b949e}
+.tcard{position:fixed;z-index:30;max-width:360px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;box-shadow:0 6px 20px rgba(0,0,0,.18);display:none}
+.tcard h5{margin:0 0 4px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tcard .tag{font-size:11px;font-weight:600;border-radius:999px;padding:0 8px;border:1px solid}
+.tcard .tag.off{color:var(--good);border-color:var(--good)} .tcard .tag.not{color:var(--mute);border-color:var(--line)}
+.tcard .lab{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin-top:6px}
+.tip{position:fixed;z-index:20;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.15);display:none}
+.quote{border-left:3px solid var(--accent);padding:4px 10px;margin:6px 0;font-size:13px}
+table.t{border-collapse:collapse;font-size:13px;width:100%}
+table.t td,table.t th{border:1px solid var(--line);padding:4px 8px;text-align:left}
+table.t th{color:var(--mute);font-weight:600;font-size:12px}
+@media (max-width:960px){.stage,.cols{grid-template-columns:1fr}.proc{grid-template-columns:90px 1fr}.proc .q{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The leader funnel</h1>
+  <p class="muted">How a PostgreSQL parallel query runs, and why more workers sometimes help a lot and sometimes not at all.</p>
+
+  <div class="panel">
+    <h2>The setup</h2>
+    <p>An online shop has an <code>orders</code> table. When PostgreSQL runs a <span class="term" data-t="pquery">parallel query</span>, the work is split among several processes. Both names below are official PostgreSQL terms (hover any dotted word for its meaning and English origin):</p>
+    <ul style="margin:0 0 8px;padding-left:20px">
+      <li><b><span class="term" data-t="worker">Workers</span></b>, officially <span class="term" data-t="bgworker">background worker processes</span>. When the <span class="term" data-t="gather">Gather</span> node is reached, the process serving your <span class="term" data-t="session">session</span> requests them. Each one scans part of the table: in a <span class="term" data-t="pseqscan">parallel sequential scan</span>, the table's <span class="term" data-t="block">blocks</span> "will be divided into ranges and shared among the cooperating processes".</li>
+      <li>The <b><span class="term" data-t="leader">leader</span></b>: the process serving your session, which runs the Gather node. It "must also read all of the tuples generated by the workers" (a <span class="term" data-t="tuple">tuple</span> is a row), and it sends the results on to your <span class="term" data-t="client">client</span>.</li>
+    </ul>
+    <p>Every result row passes through the leader: many workers in, one way out. On this page I call that a <span class="term" data-t="funnel">funnel</span>, which is my metaphor, not a PostgreSQL term. Pick a <span class="term" data-t="query">query</span> and a number of workers, then press Play.</p>
+
+    <div class="row" style="margin-top:10px">
+      <span class="lbl">Query:</span>
+      <button class="btn on" data-q="find">1 · Find refund orders</button>
+      <button class="btn" data-q="export">2 · Export every order</button>
+      <button class="btn" data-q="count">3 · Count refund orders</button>
+    </div>
+    <div class="cols" style="margin-top:10px">
+      <div><pre class="sql" id="sql"></pre><p class="small muted qdesc" id="qdesc" style="margin-top:6px"></p></div>
+      <div><pre class="sql" id="plan"></pre><p class="small muted" style="margin-top:6px">Plan shape, as <span class="term" data-t="explain">EXPLAIN</span> would show it (costs omitted). Hover the node names.</p></div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <span class="lbl">Workers:</span>
+      <span id="wbtns" class="row"></span>
+      <span class="lbl" style="margin-left:14px"><span class="term" data-t="lp">parallel_leader_participation</span>:</span>
+      <button class="btn on" data-lp="1">on (default)</button>
+      <button class="btn" data-lp="0">off</button>
+    </div>
+    <p class="small muted" style="margin:6px 0 0">The default <code>max_parallel_workers_per_gather</code> is 2. Going above 2 requires raising it, and the pool is also capped by <code>max_parallel_workers</code> and <code>max_worker_processes</code> (both 8 by default). If fewer workers are available than planned, the query simply runs with fewer.</p>
+  </div>
+
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Watch it run</h2>
+      <div class="row">
+        <button class="btn pri" id="play">▶ Play</button>
+        <button class="btn" id="step">Step</button>
+        <button class="btn" id="reset">⟲ Reset</button>
+        <span class="lbl" style="margin-left:6px">speed</span><input type="range" id="speed" min="0" max="6" value="2">
+      </div>
+    </div>
+    <div class="stage" style="margin-top:12px">
+      <div class="box">
+        <h4>Table <code>orders</code></h4>
+        <div class="blocks" id="blocks"></div>
+        <p class="small muted" style="margin:6px 0 0">120 <span class="term" data-t="block">blocks</span> × 20 rows (scaled down: a real block is an 8 kB page holding many rows). An outlined block is being scanned right now; a filled block is done. Colour = which process scanned it. For simplicity, each process takes one block at a time; real PostgreSQL hands out ranges of blocks.</p>
+      </div>
+      <div>
+        <div class="procs" id="workers"></div>
+        <div class="funnel" id="funnelTxt">▼ every result <span class="term" data-t="tuple">tuple</span> goes through the leader ▼</div>
+        <div class="procs" id="leader"></div>
+      </div>
+      <div class="box">
+        <h4>Client (your app)</h4>
+        <div class="big" id="recv">0</div>
+        <div class="small muted" id="recvOf">rows received</div>
+        <div class="bar"><span id="recvBar" style="width:0"></span></div>
+        <div class="clock">
+          <div class="stat"><div class="v" id="ticks">0</div><div class="l">time (ticks)</div></div>
+          <div class="stat"><div class="v" id="speedup">–</div><div class="l">speed-up vs 0 workers</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+    <p class="small muted" style="margin-top:10px"><b>Simulation rules</b> (my simplifications, not PostgreSQL internals): time moves in <span class="term" data-t="tick">ticks</span>, and each tick a process has 4 units of work. Scanning 1 row costs 1. For the leader, receiving 1 row from a worker costs 1 and passing it on to the client costs 1. Each worker hands its rows over through a small <span class="term" data-t="queue">queue</span> of 8 rows; when the queue is full, the worker is blocked. Workers need 12 ticks to start; the leader starts immediately. The last two rules come straight from the docs for <code>parallel_leader_participation</code>: workers can "become blocked because the leader is not reading tuples fast enough", and without leader participation, the leader must "wait for worker processes to start up".</p>
+  </div>
+
+  <div class="panel">
+    <h2>The whole picture: speed-up for 0 to 6 workers</h2>
+    <p class="small muted">Each point is a full simulation run. Speed-up = time with 0 workers ÷ time with N workers. The dashed line is "perfect": N workers plus the leader, all scanning. Hover a point for details.</p>
+    <div class="chartwrap"><svg id="chart" viewBox="0 0 760 300" width="100%" role="img" aria-label="Speed-up by number of workers for the three queries"></svg></div>
+    <div id="chartTable" style="margin-top:8px"></div>
+  </div>
+
+  <div class="panel">
+    <h2>What the PostgreSQL docs say</h2>
+    <div class="cols">
+      <div>
+        <h3>The two cases</h3>
+        <div class="quote">"When the parallel portion of the plan generates only a small number of tuples, the leader will often behave very much like an additional worker, speeding up query execution."</div>
+        <div class="quote">"…when the parallel portion of the plan generates a large number of tuples, the leader may be almost entirely occupied with reading the tuples generated by the workers…"</div>
+        <p class="small muted">Section 15.1, How Parallel Query Works. Query 1 is the first case and query 2 is the second.</p>
+        <div class="quote">"Setting this value to off reduces the likelihood that workers will become blocked because the leader is not reading tuples fast enough, but requires the leader process to wait for worker processes to start up before the first tuples can be produced."</div>
+        <p class="small muted">Description of <code>parallel_leader_participation</code>, Resource Consumption chapter. This is the red "blocked" state in the animation.</p>
+        <h3>The fix: send less through the funnel</h3>
+        <p>For <span class="term" data-t="aggregate">aggregates</span>, PostgreSQL works in two stages. "Each process participating in the parallel portion of the query" (the leader too, if it participates) computes a <span class="term" data-t="partialagg">Partial Aggregate</span> over its own rows. Only those partial results are transferred to the leader, which combines them in a <span class="term" data-t="finalagg">Finalize Aggregate</span>. That's query 3: each worker sends <b>one</b> tuple (its count) instead of every matching row.</p>
+        <p class="small muted">Section 15.3.3, Parallel Aggregation.</p>
+      </div>
+      <div>
+        <h3>The <span class="term" data-t="planner">planner</span> prices the hand-over</h3>
+        <table class="t">
+          <tr><th>Setting</th><th>Default</th><th>Meaning (from the docs)</th></tr>
+          <tr><td><code>cpu_tuple_cost</code></td><td>0.01</td><td>cost of processing each row</td></tr>
+          <tr><td><code>parallel_tuple_cost</code></td><td>0.1</td><td>cost of transferring one row from a worker to another process</td></tr>
+          <tr><td><code>parallel_setup_cost</code></td><td>1000</td><td>cost of launching the worker processes</td></tr>
+          <tr><td><code>parallel_leader_participation</code></td><td>on</td><td>whether the leader also runs the scan itself</td></tr>
+        </table>
+        <p style="margin-top:8px">So the planner assumes that <b>transferring a row from a worker costs 10× as much as processing it</b> (<span class="term" data-t="cost">cost</span> units are arbitrary, only the ratios matter). For a query like 2, it will usually judge a parallel plan not worth it and choose a plain Seq Scan. You could encourage parallel plans to see this for yourself, for example with <code>SET parallel_setup_cost = 0; SET parallel_tuple_cost = 0;</code>, but the funnel would still be there.</p>
+        <h3>Same lesson as your counter</h3>
+        <p>In your C experiment the mutex was the funnel: every increment had to pass through it one at a time, so extra threads only added waiting. The leader is a funnel for rows. Parallelism pays off when workers do a lot of work on their own and send very little through the shared point.</p>
+      </div>
+    </div>
+    <h3>Sources</h3>
+    <ul class="small">
+      <li><a href="https://www.postgresql.org/docs/current/how-parallel-query-works.html" target="_blank" rel="noopener">PostgreSQL docs · 15.1 How Parallel Query Works</a></li>
+      <li><a href="https://www.postgresql.org/docs/current/parallel-plans.html" target="_blank" rel="noopener">PostgreSQL docs · 15.3 Parallel Plans</a> (parallel sequential scan, parallel aggregation)</li>
+      <li><a href="https://www.postgresql.org/docs/current/runtime-config-query.html" target="_blank" rel="noopener">PostgreSQL docs · Query Planning: planner cost constants</a></li>
+      <li><a href="https://www.postgresql.org/docs/current/runtime-config-resource.html" target="_blank" rel="noopener">PostgreSQL docs · Resource Consumption</a> (<code>parallel_leader_participation</code>, <code>max_parallel_workers_per_gather</code>, default 2)</li>
+      <li><a href="https://www.postgresql.org/docs/current/glossary.html" target="_blank" rel="noopener">PostgreSQL docs · Glossary</a> (tuple, background worker, data page, session, client, query planner)</li>
+      <li>English origins: standard etymology references such as the <a href="https://www.etymonline.com/" target="_blank" rel="noopener">Online Etymology Dictionary</a>.</li>
+    </ul>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+<div class="tcard" id="tcard" role="tooltip"></div>
+
+<script>
+"use strict";
+/* ======================= SIMULATION ======================= */
+var BLOCKS=120, ROWS=20, BUDGET=4, QCAP=8, STARTUP=12;
+var PCOL=['var(--leader)','var(--w1)','var(--w2)','var(--w3)','var(--w4)','var(--w5)','var(--w6)'];
+var QUERIES={
+  find:{sql:"-- 1% of orders mention a refund\nSELECT *\nFROM   orders\nWHERE  note LIKE '%refund%';",
+        desc:'Few rows come out: the workers do the heavy scanning and send the leader only about 1 row in 100. A LIKE pattern starting with % cannot use an ordinary B-tree index, so every row has to be read, which is a typical reason for a sequential scan.',
+        emit:'match'},
+  export:{sql:"-- dump the whole table to a file\nSELECT *\nFROM   orders;",
+        desc:'Every row comes out, for example an app loading the whole table. Every one of those rows must go through the leader.',
+        emit:'all'},
+  count:{sql:"-- how many refund orders?\nSELECT count(*)\nFROM   orders\nWHERE  note LIKE '%refund%';",
+        desc:'Same scanning as query 1, but each worker counts on its own and sends the leader just one number.',
+        emit:'partial'}
+};
+function matches(rowId){ return ((rowId*2654435761)>>>0)%100 < 1; }
+
+function newSim(qk,nw,lp){
+  var S={q:qk,emit:QUERIES[qk].emit,nw:nw,lp:lp&&nw>0||nw===0,t:0,next:0,
+    blocks:new Array(BLOCKS).fill(null).map(function(){return {state:0,by:-1};}),
+    procs:[],sent:0,expected:0,leaderMix:{scan:0,fwd:0,idle:0},partSum:0,partsGot:0,finalSent:false,done:false};
+  for(var r=0;r<BLOCKS*ROWS;r++){ if(S.emit==='all'||(S.emit==='match'&&matches(r))) S.expected++; }
+  if(S.emit==='partial') S.expected=1;
+  for(var i=0;i<=nw;i++) S.procs.push({id:i,blk:-1,row:0,q:[],status:i===0?'':'starting',done:false,count:0,partSent:false,pulled:false});
+  return S;
+}
+function takeBlock(S,p){
+  if(S.next>=BLOCKS) return false;
+  p.blk=S.next++; p.row=0; S.blocks[p.blk].state=1; S.blocks[p.blk].by=p.id; return true;
+}
+/* scan up to `budget` units; returns units used. leader sends its own matches directly */
+function scan(S,p,budget,isLeader){
+  var used=0;
+  while(used<budget){
+    if(p.blk<0 && !takeBlock(S,p)) break;
+    var rowId=p.blk*ROWS+p.row, out=S.emit==='all'||(S.emit==='match'&&matches(rowId));
+    if(S.emit==='partial' && matches(rowId)) p.count++;
+    if(out){
+      if(isLeader){ if(used+2>budget) break; used+=2; S.sent++; }
+      else { if(p.q.length>=QCAP){ p.status='wait'; return used; } p.q.push(1); used+=1; }
+    } else used+=1;
+    p.row++;
+    if(p.row>=ROWS){ S.blocks[p.blk].state=2; p.blk=-1; }
+  }
+  return used;
+}
+function tick(S){
+  if(S.done) return;
+  var i,p;
+  // workers
+  for(i=1;i<=S.nw;i++){ p=S.procs[i]; p.pulled=false; if(p.done) continue;
+    if(S.t<STARTUP){ p.status='starting'; continue; }
+    p.status='scan';
+    scan(S,p,BUDGET,false);
+    if(p.blk<0 && S.next>=BLOCKS && p.status!=='wait'){
+      if(S.emit==='partial' && !p.partSent){ if(p.q.length<QCAP){ p.q.push(1); p.partSent=true; } }
+      if(S.emit!=='partial'||p.partSent){ p.done=true; p.status='done'; }
+    }
+  }
+  // leader
+  var L=S.procs[0], b=BUDGET, fwd=0, scanned=0;
+  if(S.nw>0){
+    var any=true, k=0;
+    while(any && b>0){ any=false;
+      for(var j=0;j<S.nw && b>0;j++){ var w=S.procs[1+((k+j)%S.nw)];
+        if(w.q.length){
+          if(S.emit==='partial'){ w.q.shift(); b-=1; fwd+=1; S.partsGot++; w.pulled=true; any=true; }
+          else if(b>=2){ w.q.shift(); b-=2; fwd+=2; S.sent++; w.pulled=true; any=true; }
+        } }
+      k++; }
+  }
+  var queuesEmpty=S.procs.slice(1).every(function(w){return w.q.length===0;});
+  if(S.lp && b>0 && (queuesEmpty||S.nw===0) && !L.done){ scanned=scan(S,L,b,true); b-=scanned; }
+  if(L.blk<0 && S.next>=BLOCKS) L.done=true;
+  S.leaderMix.scan+=scanned; S.leaderMix.fwd+=fwd; S.leaderMix.idle+=Math.max(0,b);
+  L.status= fwd>0&&scanned>0?'both': fwd>0?'fwd': scanned>0?'scan':'idle';
+  S.t++;
+  // finished?
+  var allBlocks=S.blocks.every(function(x){return x.state===2;});
+  var workersDone=S.procs.slice(1).every(function(w){return w.done&&w.q.length===0;});
+  if(allBlocks && workersDone && (S.lp||S.nw>0)){
+    if(S.emit==='partial'){ if(!S.finalSent){ S.finalSent=true; S.sent=1; } }
+    S.done=true;
+  }
+}
+function runToEnd(qk,nw,lp){ var S=newSim(qk,nw,lp), guard=0; while(!S.done&&guard++<100000) tick(S); return S; }
+
+/* ======================= UI ======================= */
+var $=function(s){return document.querySelector(s);}, $$=function(s){return Array.prototype.slice.call(document.querySelectorAll(s));};
+var state={q:'find',nw:2,lp:1}, S=null, playing=false, acc=0, last=0, baseCache={};
+var SPEEDS=[15,30,60,120,240,480,960];
+
+function T(key,txt){ return '<span class="term" data-t="'+key+'">'+txt+'</span>'; }
+function planText(){
+  var k=state.nw, q=state.q, F=T('filter','Filter')+': (note ~~ \'%refund%\'::text)';
+  if(k===0){
+    if(q==='count') return T('aggregate','Aggregate')+'\n  ->  '+T('seqscan','Seq Scan')+' on orders\n        '+F;
+    return T('seqscan','Seq Scan')+' on orders'+(q==='find'?'\n  '+F:'');
+  }
+  if(q==='count') return T('finalagg','Finalize Aggregate')+'\n  ->  '+T('gather','Gather')+'\n        '+T('wplanned','Workers Planned')+': '+k+'\n        ->  '+T('partialagg','Partial Aggregate')+'\n              ->  '+T('pseqscan','Parallel Seq Scan')+' on orders\n                    '+F;
+  return T('gather','Gather')+'\n  '+T('wplanned','Workers Planned')+': '+k+'\n  ->  '+T('pseqscan','Parallel Seq Scan')+' on orders'+(q==='find'?'\n        '+F:'');
+}
+function baseline(q,lp){ var key=q; if(!(key in baseCache)) baseCache[key]=runToEnd(q,0,1).t; return baseCache[key]; }
+
+function reset(){
+  S=newSim(state.q,state.nw,state.lp); stop();
+  $('#sql').textContent=QUERIES[state.q].sql; $('#qdesc').textContent=QUERIES[state.q].desc; $('#plan').innerHTML=planText();
+  $('#blocks').innerHTML=S.blocks.map(function(_,i){return '<div class="blk" id="b'+i+'" title="block '+i+'"></div>';}).join('');
+  var wh='';
+  for(var i=1;i<=state.nw;i++) wh+='<div class="proc" id="p'+i+'" style="--pc:'+PCOL[i]+'"><div class="nm"><i class="sw" style="background:'+PCOL[i]+'"></i><span class="term" data-t="worker">worker</span>&nbsp;'+i+'</div><div><div class="st" id="s'+i+'"></div></div><div class="row" style="gap:6px"><span class="flow" id="f'+i+'"></span><div class="q" id="q'+i+'" title="rows waiting to be read by the leader (8 max)"></div></div></div>';
+  $('#workers').innerHTML=wh||'<div class="muted small" style="padding:6px 2px">No workers: there is no Gather node; your session\'s process does a plain Seq Scan alone.</div>';
+  $('#funnelTxt').style.display=state.nw?'block':'none';
+  $('#leader').innerHTML='<div class="proc leader" style="--pc:'+PCOL[0]+'"><div class="nm"><i class="sw" style="background:'+PCOL[0]+'"></i><span class="term" data-t="leader">leader</span></div><div><div class="st" id="s0"></div><div class="mix" id="mix" title="how the leader has spent its time so far"></div><div class="small muted" id="mixTxt"></div></div><div></div></div>';
+  $('#recvOf').textContent='of '+S.expected.toLocaleString('en-US')+' rows received';
+  render(); renderChart(); if(typeof prepTerms==='function') prepTerms();
+}
+function render(){
+  S.blocks.forEach(function(b,i){ var el=document.getElementById('b'+i); el.className='blk'+(b.state===1?' cur':b.state===2?' done':''); el.style.setProperty('--pc',b.by>=0?PCOL[b.by]:'transparent'); });
+  for(var i=1;i<=S.nw;i++){ var p=S.procs[i];
+    var txt={starting:'starting up… (launching a background worker takes time)',scan:'scanning'+(p.blk>=0?' block '+p.blk:''),wait:'BLOCKED: the leader is not reading tuples fast enough',done:'finished'}[p.status]||p.status;
+    var el=document.getElementById('s'+i); el.textContent=txt; el.className='st'+(p.status==='wait'?' wait':p.status==='scan'?' scan':'');
+    var q=''; for(var k=0;k<QCAP;k++) q+='<i class="'+(k<p.q.length?'f':'')+'"></i>'; document.getElementById('q'+i).innerHTML=q;
+    document.getElementById('f'+i).textContent=p.pulled?'↓':'';
+  }
+  var L=S.procs[0], ls={scan:'scanning'+(L.blk>=0?' block '+L.blk:'')+' itself',fwd:'reading tuples from workers & passing them on',both:'reading tuples from workers, then scanning itself',idle:S.done?'finished':(S.nw&&!S.lp?'waiting for rows (not allowed to scan)':'waiting for rows')}[L.status]||'ready';
+  var s0=document.getElementById('s0'); s0.textContent=ls; s0.className='st'+(L.status==='fwd'?' fwd':L.status==='scan'||L.status==='both'?' scan':'');
+  var m=S.leaderMix, tot=m.scan+m.fwd+m.idle||1;
+  $('#mix').innerHTML='<span style="width:'+(m.scan/tot*100)+'%;background:var(--good)"></span><span style="width:'+(m.fwd/tot*100)+'%;background:var(--accent)"></span><span style="width:'+(m.idle/tot*100)+'%;background:var(--idle)"></span>';
+  $('#mixTxt').innerHTML='time spent: <b style="color:var(--good)">scanning '+Math.round(m.scan/tot*100)+'%</b> · <b style="color:var(--accent)">reading workers\' tuples '+Math.round(m.fwd/tot*100)+'%</b> · idle '+Math.round(m.idle/tot*100)+'%';
+  $('#recv').textContent=S.sent.toLocaleString('en-US');
+  $('#recvBar').style.width=(S.sent/S.expected*100)+'%';
+  $('#ticks').textContent=S.t;
+  var v=$('#verdict');
+  if(S.done){
+    var base=baseline(state.q), sp=base/S.t;
+    $('#speedup').textContent=sp.toFixed(2)+'×';
+    v.style.display='block';
+    var waitNote='';
+    if(state.q==='export'&&state.nw>0) v.innerHTML='<b>Speed-up '+sp.toFixed(2)+'× with '+state.nw+' worker'+(state.nw>1?'s':'')+'.</b> The workers spent most of their time <b style="color:var(--bad)">blocked</b> because the leader wasn\'t reading their tuples fast enough, and the leader spent '+Math.round(m.fwd/tot*100)+'% of its time reading and passing on tuples. However many workers you add, rows can only leave as fast as the leader can pass them on.';
+    else if(state.nw===0) v.innerHTML='<b>Baseline: '+S.t+' ticks</b> with a single process. Now try 2, 4 or 6 workers.';
+    else v.innerHTML='<b>Speed-up '+sp.toFixed(2)+'× with '+state.nw+' worker'+(state.nw>1?'s':'')+(state.lp?' + the leader':'')+'.</b> Few tuples went through the leader, so it was free to '+(state.lp?'scan like an extra worker ('+Math.round(m.scan/tot*100)+'% of its time).':'wait, since leader participation is off.')+' The extra 12 ticks of worker start-up are why it isn\'t quite perfect.';
+  } else { $('#speedup').textContent='–'; v.style.display='none'; }
+}
+
+/* controls */
+$('#wbtns').innerHTML=[0,1,2,3,4,5,6].map(function(n){return '<button class="btn'+(n===state.nw?' on':'')+'" data-w="'+n+'">'+n+'</button>';}).join('');
+$$('[data-w]').forEach(function(b){ b.onclick=function(){ state.nw=+b.dataset.w; $$('[data-w]').forEach(function(x){x.classList.toggle('on',x===b);}); reset(); }; });
+$$('[data-q]').forEach(function(b){ b.onclick=function(){ state.q=b.dataset.q; $$('[data-q]').forEach(function(x){x.classList.toggle('on',x===b);}); reset(); }; });
+$$('[data-lp]').forEach(function(b){ b.onclick=function(){ state.lp=+b.dataset.lp; $$('[data-lp]').forEach(function(x){x.classList.toggle('on',x===b);}); reset(); }; });
+function stop(){ playing=false; $('#play').textContent='▶ Play'; }
+function frame(ts){
+  if(!playing) return;
+  var dt=Math.min(100,ts-(last||ts)); last=ts; acc+=dt/1000*SPEEDS[+$('#speed').value];
+  var n=Math.floor(acc); acc-=n; while(n-->0&&!S.done) tick(S);
+  render(); if(S.done){ stop(); return; } requestAnimationFrame(frame);
+}
+$('#play').onclick=function(){ if(playing){ stop(); return; } if(S.done) reset(); playing=true; last=0; acc=0; $('#play').textContent='❚❚ Pause'; requestAnimationFrame(frame); };
+$('#step').onclick=function(){ stop(); if(S.done) return; tick(S); render(); };
+$('#reset').onclick=reset;
+
+/* chart */
+var tip=$('#tip');
+function renderChart(){
+  var svg=$('#chart'), W=760,H=300, m={l:46,r:150,t:14,b:36}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  var series=[{k:'find',name:'1 · Find refunds',c:'var(--w1)'},{k:'count',name:'3 · Count refunds',c:'var(--w3)'},{k:'export',name:'2 · Export all',c:'var(--w2)'}];
+  var data={}, ymax=7.5;
+  series.forEach(function(s){ var base=baseline(s.k); data[s.k]=[0,1,2,3,4,5,6].map(function(n){ var r=runToEnd(s.k,n,state.lp); return {n:n,t:r.t,sp:base/r.t}; }); });
+  var X=function(n){return m.l+n/6*iw;}, Y=function(v){return m.t+ih-v/ymax*ih;};
+  var g='';
+  for(var v=0;v<=7;v++){ g+='<line x1="'+m.l+'" x2="'+(m.l+iw)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="var(--grid)"/><text x="'+(m.l-8)+'" y="'+(Y(v)+4)+'" text-anchor="end" font-size="11" fill="var(--mute)">'+v+'×</text>'; }
+  for(var n=0;n<=6;n++) g+='<text x="'+X(n)+'" y="'+(H-14)+'" text-anchor="middle" font-size="11" fill="var(--mute)">'+n+'</text>';
+  g+='<text x="'+(m.l+iw/2)+'" y="'+(H-1)+'" text-anchor="middle" font-size="11" fill="var(--mute)">number of workers</text>';
+  // ideal
+  var ideal=[0,1,2,3,4,5,6].map(function(n){return X(n)+','+Y(state.lp?n+1:Math.max(1,n));}).join(' ');
+  g+='<polyline points="'+ideal+'" fill="none" stroke="var(--mute)" stroke-width="1.5" stroke-dasharray="4 4"/>';
+  g+='<text x="'+(X(6)+8)+'" y="'+(Y(state.lp?7:6)+4)+'" font-size="11" fill="var(--mute)">perfect</text>';
+  g+='<rect x="'+(X(state.nw)-14)+'" y="'+m.t+'" width="28" height="'+ih+'" fill="var(--hl)" opacity=".7"/>';
+  var labelsY=[];
+  series.forEach(function(s){ var pts=data[s.k].map(function(d){return X(d.n)+','+Y(d.sp);}).join(' ');
+    g+='<polyline points="'+pts+'" fill="none" stroke="'+s.c+'" stroke-width="2"/>';
+    data[s.k].forEach(function(d){ g+='<circle cx="'+X(d.n)+'" cy="'+Y(d.sp)+'" r="4.5" fill="'+s.c+'" stroke="var(--panel)" stroke-width="2"/><circle cx="'+X(d.n)+'" cy="'+Y(d.sp)+'" r="11" fill="transparent" data-tip="'+s.name+'<br>'+d.n+' worker'+(d.n===1?'':'s')+': '+d.t+' ticks<br>speed-up <b>'+d.sp.toFixed(2)+'×</b>"/>'; });
+    var last=data[s.k][6]; var ly=Y(last.sp)+4; labelsY.forEach(function(y){ if(Math.abs(ly-y)<14) ly=y+14; }); labelsY.push(ly);
+    g+='<text x="'+(X(6)+10)+'" y="'+ly+'" font-size="12" fill="var(--ink)">'+s.name+' · '+last.sp.toFixed(1)+'×</text>';
+  });
+  svg.innerHTML=g;
+  svg.onmousemove=function(e){ var t=e.target.getAttribute&&e.target.getAttribute('data-tip'); if(t){ tip.innerHTML=t; tip.style.display='block'; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; } else tip.style.display='none'; };
+  svg.onmouseleave=function(){ tip.style.display='none'; };
+  // table view
+  var h='<details><summary class="small muted" style="cursor:pointer">Show as a table</summary><table class="t" style="margin-top:6px"><tr><th>Query</th>'+[0,1,2,3,4,5,6].map(function(n){return '<th>'+n+' w</th>';}).join('')+'</tr>';
+  series.forEach(function(s){ h+='<tr><td>'+s.name+'</td>'+data[s.k].map(function(d){return '<td>'+d.sp.toFixed(2)+'×</td>';}).join('')+'</tr>'; });
+  $('#chartTable').innerHTML=h+'</table></details>';
+}
+
+/* ======================= GLOSSARY ======================= */
+var GL={
+ leader:{w:'leader',pg:true,d:'The process serving your session that runs the <code>Gather</code> node. The docs: it executes the parallel part of the plan too, "but it has an additional responsibility: it must also read all of the tuples generated by the workers."',o:'Old English <i>lǣdan</i>, "to guide, to make go", plus <i>-er</i>, "one who": the one who guides the others.'},
+ worker:{w:'worker',pg:true,d:'Short for <i>background worker process</i>. "Every background worker process that is successfully started for a given parallel query will execute the parallel portion of the plan."',o:'Old English <i>weorc</i>, "work, deed", plus <i>-er</i>: one who does the work.'},
+ bgworker:{w:'background worker process',pg:true,d:'Glossary: a "process within an instance, which runs system- or user-supplied code". It is used for parallel queries and other features. It has no client of its own; it works behind the scenes for another process.',o:'<i>Background</i> was originally a 17th-century stage and painting term: the part of a scene behind the main figures. <i>Process</i> is from Latin <i>processus</i>, "a going forward".'},
+ tuple:{w:'tuple',pg:true,d:'Glossary: "A collection of attributes in a fixed order." When the order comes from a table, it\'s "often called a row".',o:'A word abstracted by mathematicians from endings like <i>quintuple</i> and <i>sextuple</i>, from Latin <i>-plex / -plus</i>, "-fold". An "n-tuple" is an ordered list of n things.'},
+ block:{w:'block (data page)',pg:true,d:'The unit PostgreSQL stores tables in. The glossary calls it a <i>data page</i>: "The basic structure used to store relation data. All pages are of the same size", which is 8 kB by default. The parallel-scan docs speak of the table\'s "blocks".',o:'<i>Block</i>: Middle Dutch <i>blok</i>, "tree trunk, log", via French <i>bloc</i>. <i>Page</i>: Latin <i>pagina</i>, "a written leaf of paper".'},
+ gather:{w:'Gather',pg:true,d:'The plan node where parallelism begins. Everything below it runs in the workers (and the leader); Gather "reads tuples from the workers in whatever order is convenient". Its sibling <code>Gather Merge</code> does the same but keeps rows sorted.',o:'Old English <i>gaderian</i>, "to bring together", related to <i>together</i>.'},
+ pseqscan:{w:'Parallel Seq Scan',pg:true,d:'"The table\'s blocks will be divided into ranges and shared among the cooperating processes. Each worker process will complete the scanning of its given range of blocks before requesting an additional range of blocks."',o:'<i>Parallel</i>: Greek <i>parallēlos</i>, "beside one another". <i>Sequential</i>: Latin <i>sequi</i>, "to follow". <i>Scan</i>: Latin <i>scandere</i>, "to climb". In English it first meant marking the rhythm of verse, later "to look over closely".'},
+ seqscan:{w:'Seq Scan',pg:true,d:'A sequential scan: one process reads the whole table, block by block, and checks every row. It\'s what you get with 0 workers.',o:'See <i>Parallel Seq Scan</i>: <i>sequi</i> "to follow" plus <i>scandere</i> "to climb".'},
+ filter:{w:'Filter',pg:true,d:'In <code>EXPLAIN</code> output, the condition applied to every row the scan reads. Rows that fail it are thrown away right there. <code>~~</code> is PostgreSQL\'s operator for <code>LIKE</code>.',o:'Medieval Latin <i>filtrum</i>, "felt": felt cloth was used to strain liquids.'},
+ wplanned:{w:'Workers Planned',pg:true,d:'How many workers the planner wants for this Gather. The number actually started can be lower if the worker pool is busy (<code>EXPLAIN ANALYZE</code> shows it as <code>Workers Launched</code>).',o:'<i>Plan</i>: French <i>plan</i>, "ground plan of a building", from Latin <i>planum</i>, "flat surface".'},
+ aggregate:{w:'aggregate',pg:true,d:'Glossary: a function that "combines (aggregates) multiple input values, for example by counting, averaging or adding, yielding a single output value", like <code>count(*)</code>.',o:'Latin <i>aggregare</i>, "to add to a flock": <i>ad</i> "to" + <i>grex, gregis</i> "flock". Also the root of <i>gregarious</i> and <i>congregation</i>.'},
+ partialagg:{w:'Partial Aggregate',pg:true,d:'First stage of parallel aggregation. Each participating process aggregates its own rows, "producing a partial result for each group of which that process is aware". Only that partial result goes to the leader.',o:'<i>Partial</i>: Late Latin <i>partialis</i>, from <i>pars</i>, "part". It covers only part of the data.'},
+ finalagg:{w:'Finalize Aggregate',pg:true,d:'Second stage, run by the leader: it "re-aggregates the results across all workers in order to produce the final result", for example adding up the partial counts.',o:'<i>Final</i>: Latin <i>finalis</i>, from <i>finis</i>, "end, boundary", plus <i>-ize</i>, "to make".'},
+ planner:{w:'query planner',pg:true,d:'Glossary: "The part of PostgreSQL that is devoted to determining (planning) the most efficient way to execute queries." It decides whether a parallel plan is worth it, and with how many workers.',o:'<i>Plan</i>: French <i>plan</i>, Latin <i>planum</i>, "flat surface": first a drawing on a flat sheet, later any scheme.'},
+ explain:{w:'EXPLAIN',pg:true,d:'The SQL command that shows the plan the planner chose, without running the query. <code>EXPLAIN ANALYZE</code> also runs it and reports real numbers.',o:'Latin <i>explanare</i>, "to make level, to make plain", from <i>planus</i>, "flat".'},
+ session:{w:'session',pg:true,d:'Glossary: "A state that allows a client and a backend to interact, communicating over a connection." Your app\'s database connection is a session, and a backend process serves it. In a parallel query, that process is the leader.',o:'Latin <i>sessio</i>, "a sitting", from <i>sedere</i>, "to sit": a period of sitting together.'},
+ client:{w:'client',pg:true,d:'Glossary: "Any process, possibly remote, that establishes a session by connecting to an instance to interact with a database". Here, your web app.',o:'Latin <i>cliens</i>, "follower, dependant" of a powerful patron in ancient Rome.'},
+ query:{w:'query',pg:true,d:'Glossary: "A request sent by a client to a backend, usually to return results or to modify data on the database."',o:'Latin <i>quaere</i>, "ask!", the command form of <i>quaerere</i>, "to seek, to ask".'},
+ pquery:{w:'parallel query',pg:true,d:'Glossary: "The ability to handle parts of executing a query to take advantage of parallel processes on servers with multiple CPUs."',o:'<i>Parallel</i>: Greek <i>para</i> "beside" + <i>allēlos</i> "one another". <i>Query</i>: Latin <i>quaere</i>, "ask!".'},
+ lp:{w:'parallel_leader_participation',pg:true,d:'Setting, default <b>on</b>: lets the leader also execute the plan under Gather "instead of waiting for worker processes". Turning it off "reduces the likelihood that workers will become blocked because the leader is not reading tuples fast enough".',o:'<i>Participation</i>: Latin <i>participare</i>, "to take part": <i>pars</i> "part" + <i>capere</i> "to take".'},
+ cost:{w:'cost (planner)',pg:true,d:'The planner\'s estimate of how expensive a plan is, in arbitrary units. Only the ratios matter: the default <code>parallel_tuple_cost</code> (0.1) is 10× <code>cpu_tuple_cost</code> (0.01).',o:'Latin <i>constare</i>, "to stand firm; to be fixed at a price": <i>con</i> "together" + <i>stare</i> "to stand".'},
+ queue:{w:'queue',pg:false,d:'Not a term from the user docs. The docs only say workers can "become blocked because the leader is not reading tuples fast enough". In PostgreSQL\'s source code, the hand-over is a shared-memory <i>tuple queue</i> per worker; its size here (8 rows) is made up for the simulation.',o:'French <i>queue</i>, "tail", from Latin <i>cauda</i>: a line of people looks like a tail.'},
+ funnel:{w:'funnel',pg:false,d:'My metaphor, not PostgreSQL vocabulary: many workers produce rows, but they all leave through one process, the leader. Engineers would also call it a <i>bottleneck</i>, the narrow neck of a bottle that limits how fast liquid pours out.',o:'Via Old Provençal <i>fonilh</i>, from Latin <i>infundibulum</i>, from <i>infundere</i>, "to pour in".'},
+ tick:{w:'tick',pg:false,d:'A step of this simulation\'s clock, not a PostgreSQL unit. Use ticks to compare runs, not to predict real milliseconds.',o:'Imitative of the short sound a clock makes; Middle English <i>tek</i>, "a light touch".'}
+};
+var tcard=document.getElementById('tcard'), pinned=null;
+function showTerm(el){
+  var g=GL[el.getAttribute('data-t')]; if(!g) return;
+  tcard.innerHTML='<h5>'+g.w+' <span class="tag '+(g.pg?'off':'not')+'">'+(g.pg?'official PostgreSQL term':'not a PostgreSQL term')+'</span></h5>'+
+    '<div class="lab">'+(g.pg?'In PostgreSQL':'What it means here')+'</div><div>'+g.d+'</div><div class="lab">English origin</div><div>'+g.o+'</div>';
+  tcard.style.display='block';
+  var r=el.getBoundingClientRect(), w=tcard.offsetWidth, h=tcard.offsetHeight;
+  var x=Math.min(Math.max(8,r.left), innerWidth-w-8), y=r.bottom+8; if(y+h>innerHeight-8) y=r.top-h-8;
+  tcard.style.left=x+'px'; tcard.style.top=Math.max(8,y)+'px';
+}
+function hideTerm(){ tcard.style.display='none'; }
+function prepTerms(){ Array.prototype.forEach.call(document.querySelectorAll('.term:not([tabindex])'),function(e){ e.setAttribute('tabindex','0'); e.setAttribute('role','button'); e.setAttribute('aria-label',(GL[e.getAttribute('data-t')]||{}).w+': show definition'); }); }
+document.addEventListener('mouseover',function(e){ var t=e.target.closest&&e.target.closest('.term'); if(t){ showTerm(t); } else if(!pinned && !(e.target.closest&&e.target.closest('#tcard'))) hideTerm(); });
+document.addEventListener('focusin',function(e){ if(e.target.classList&&e.target.classList.contains('term')) showTerm(e.target); });
+document.addEventListener('focusout',function(e){ if(e.target.classList&&e.target.classList.contains('term')&&!pinned) hideTerm(); });
+document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('.term'); if(t){ pinned=t; showTerm(t); } else if(!(e.target.closest&&e.target.closest('#tcard'))){ pinned=null; hideTerm(); } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ pinned=null; hideTerm(); } });
+window.addEventListener('scroll',function(){ if(!pinned) hideTerm(); },true);
+
+window.__sim={newSim:newSim,tick:tick,runToEnd:runToEnd};
+reset(); prepTerms();
+</script>
+</body>
+</html>

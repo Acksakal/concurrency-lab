@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concurrency vs parallelism, with cores</title>
+<style>
+:root{color-scheme:light dark;--bg:#f2f5f3;--tx:#16212b;--mu:#566471;--pn:#fff;--ln:#cdd6d2;--a:#0f6b5c;--b:#a82a6d;--hi:#e4efe9}
+@media(prefers-color-scheme:dark){:root{--bg:#111a1d;--tx:#e3eaea;--mu:#93a3a6;--pn:#182428;--ln:#2b3b40;--a:#58cdb6;--b:#ef8fc0;--hi:#1f3036}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:17px/1.65 Georgia,"Times New Roman",serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:30px;line-height:1.2;margin:0 0 10px}h2{font-size:22px;margin:38px 0 8px}
+p{margin:0 0 12px}.mu{color:var(--mu);font-size:15px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}@media(max-width:600px){.two{grid-template-columns:1fr}}
+.box{background:var(--pn);border:1px solid var(--ln);border-radius:4px;padding:12px 14px}
+.box b{display:block;font-size:19px}
+.t{border-bottom:1.5px dotted var(--a);cursor:help}.t:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--b);outline-offset:2px}
+#tip{position:fixed;z-index:9;max-width:320px;background:var(--tx);color:var(--bg);font:14px/1.45 system-ui,sans-serif;padding:9px 12px;border-radius:4px}
+#tip i{display:block;margin-top:4px;opacity:.9}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0;font:15px system-ui,sans-serif}
+button,select{font:inherit;background:var(--pn);color:var(--tx);border:1px solid var(--ln);border-radius:4px;padding:6px 12px;cursor:pointer}
+#lanes{background:var(--pn);border:1px solid var(--ln);border-radius:4px;padding:12px;font:14px system-ui,sans-serif;overflow-x:auto}
+.row{display:flex;align-items:center;gap:6px;margin:5px 0}.row>span{width:64px;flex:none;color:var(--mu)}
+.c{width:38px;height:38px;flex:none;border:1px dashed var(--ln);border-radius:3px;display:grid;place-items:center;font:600 16px ui-monospace,Consolas,monospace;position:relative}
+.c.A{background:var(--a);border:1px solid var(--a);color:var(--bg)}.c.B{background:var(--b);border:1px solid var(--b);color:var(--bg)}
+.c.sw::after{content:"⇄";position:absolute;top:-9px;left:-4px;font-size:13px;color:var(--tx)}
+.tk{margin-left:70px;color:var(--mu);font-size:12px}
+.v{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.v div{flex:1 1 190px;border:1px solid var(--ln);border-radius:4px;padding:8px 10px}
+.v .y{background:var(--hi);border-color:var(--a)}
+code{font:14px ui-monospace,Consolas,monospace;background:var(--hi);padding:1px 5px;border-radius:3px}
+dt{font-weight:700;margin-top:12px}dd{margin:0 0 0 14px;font-size:15px}dd i{color:var(--mu)}
+ul{padding-left:20px;margin:0 0 12px}li{margin:4px 0}
+.rw{--c:#8a6200}@media(prefers-color-scheme:dark){.rw{--c:#e6c15a}}
+.rw h3{font-size:19px;margin:30px 0 6px}.rw .row{gap:3px}.rw .row>span{width:78px}
+.rw .c{width:20px;height:26px;font-size:12px}
+.rw .kB{background:var(--a);border:1px solid var(--a);color:var(--bg)}.rw .kE{background:var(--b);border:1px solid var(--b);color:var(--bg)}.rw .kT{background:var(--c);border:1px solid var(--c);color:var(--bg)}
+.st{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.st div{flex:1 1 110px;border:1px solid var(--ln);border-radius:4px;padding:6px 10px;background:var(--pn);font:13px system-ui,sans-serif;color:var(--mu)}.st b{display:block;font-size:20px;color:var(--tx)}
+.rw .kX{background:var(--mu);border:1px solid var(--mu);opacity:.5}.rw .wt{outline:2px dashed var(--tx);outline-offset:-3px}
+.rw .row.sm{margin:2px 0}.rw .row.sm .c{height:12px}.rw .row.sm>span{font-size:12px}
+.fh{font-size:19px;margin:28px 0 6px}
+.fk{background:var(--pn);border:1px solid var(--ln);border-radius:4px;margin:14px 0;font:15px/1.5 system-ui,sans-serif}
+.fk [role=tablist]{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--ln)}
+.fk [role=tab]{border:0;border-radius:0;background:none;padding:9px 14px;border-bottom:3px solid transparent}
+.fk [role=tab][aria-selected=true]{border-bottom-color:var(--a);font-weight:700}
+.fk [role=tabpanel]{padding:12px 14px}.fk p{margin:8px 0;font-size:15px}
+.fk pre{margin:6px 0;padding:10px 12px;background:var(--hi);border-radius:3px;overflow-x:auto;font:13px/1.45 ui-monospace,Consolas,monospace}
+pre code{padding:0;background:none;border-radius:0;font:inherit}
+.fk .bd{display:inline-block;padding:2px 8px;border:1px solid var(--a);border-radius:3px;font-weight:700}.fk .bd.no{border-color:var(--b)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style></head><body><main>
+
+<h1>Concurrent is not the same as parallel</h1>
+<p>Does <span class="t" data-k="concurrent">concurrent</span> mean <span class="t" data-k="parallel">parallel</span>? Short version: no, the two words answer different questions. Hover or tap any dotted word to see what it means and where the word comes from.</p>
+
+<div class="two">
+<div class="box"><b>Concurrent</b>Several tasks are <em>in progress</em> during the same period. Their steps may interleave. It is about how the work is <em>structured</em>: Rob Pike’s phrase is “dealing with” many things at once.</div>
+<div class="box"><b>Parallel</b>Several tasks are <em>executing at the same instant</em>, on different <span class="t" data-k="core">cores</span>. It is about <em>execution</em>: Pike’s phrase is “doing” many things at once.</div>
+</div>
+
+<h2>See it: two tasks, two cores, one clock</h2>
+<p>Task A and task B each need 4 units of work. One column is one tick of the clock. Pick how they are run and press Step.</p>
+<div class="ctl"><label>Mode <select id="mode">
+<option value="seq">1 core, one after the other (sequential)</option>
+<option value="conc">1 core, switching between them (concurrent)</option>
+<option value="par">2 cores, both at once (concurrent and parallel)</option></select></label>
+<button id="step">Step</button><button id="play">Play</button><button id="reset">Reset</button></div>
+<div id="lanes"></div>
+<div class="v"><div id="vc"></div><div id="vp"></div><div id="vt"></div></div>
+<p class="mu" style="margin-top:10px">⇄ marks a <span class="t" data-k="context">context</span> <span class="t" data-k="switch">switch</span>. In the middle mode, the work finishes no sooner than sequentially, and in a real machine each switch also costs a little time, so it can finish later. Concurrency gives structure and responsiveness, not speed. Speed needs the second core. Pike mentions people being surprised when a program got slower on 4 processors.</p>
+<p class="mu"><strong>The “4 processors” paradox.</strong> The remark Pike quotes (“I ran the prime sieve with 4 processors and it got slower!”) illustrates the confusion his talk addresses: his slides call the reaction “Concurrency is cool! Yay parallelism!!” a fallacy. The prime sieve is the example program in the Go language specification: a chain of <span class="t" data-k="pipeline">pipeline</span> stages, each a <span class="t" data-k="goroutine">goroutine</span> that copies numbers from its input to its output while removing the multiples of one prime. The Go FAQ explains that whether a program runs faster with more CPUs depends on the problem: intrinsically sequential problems cannot be sped up by adding CPUs, and sometimes more CPUs slow a program down, because passing data between threads involves context switches that have a significant cost, which can grow with more CPUs. The FAQ names this sieve as an example: it has no significant parallelism although it launches many goroutines.</p>
+<p class="mu">OSTEP’s multiprocessor chapter describes two costs that come with more CPUs. One is cache coherence: CPUs that keep copies of the same memory in their <span class="t" data-k="cache">caches</span> must be kept consistent. The other is <span class="t" data-k="synchronization">synchronization</span>: access to shared data structures needs locks, and the chapter notes that as the number of CPUs grows, access to a synchronized shared structure becomes quite slow. The same chapter observes that a typical application uses a single CPU, so adding CPUs does not make that single application faster.</p>
+<p class="mu">Amdahl’s law, as stated in Gustafson’s 1988 paper, puts a number on the limit set by <span class="t" data-k="serial">serial</span> work. If s is the fraction of the work that must run serially, the speedup on N processors is 1 ÷ (s + (1 − s) ÷ N), so the maximum with unlimited processors is 1 ÷ s. With s = 10% and 4 processors that is about 3.1 times, and never more than 10 times. Gustafson adds that the formula assumes a fixed problem size; when the problem grows with the number of processors, much higher speedups are possible.</p>
+<p class="mu">The common thread in these sources: whether extra processors help depends on how much of the problem can truly be done independently, and on what the coordination costs.</p>
+<section class="rw">
+<h3>Real life: browser, editor and terminal at once</h3>
+<p>Picture a browser, a code editor and a terminal open together. Each is made of one or more <span class="t" data-k="process">processes</span>, and each process of one or more <span class="t" data-k="thread">threads</span>. Most of the time every one of those threads is <span class="t" data-k="idle">idle</span>: the browser waits for the network, the editor waits for the next keystroke, the terminal waits for a command. OSTEP distinguishes three process states (running, ready, blocked): a blocked thread is waiting for an event, is not ready to run, and needs no core. Only ready threads compete for cores, and the <span class="t" data-k="scheduler">scheduler</span> decides which of them runs.</p>
+<svg viewBox="0 0 640 140" width="100%" role="img" aria-label="Browser, editor and terminal windows all sharing one core" style="max-width:640px;display:block;margin:10px 0">
+<style>.w{fill:var(--pn);stroke:var(--ln)}.s{font:11px system-ui,sans-serif;fill:var(--mu)}.m{font:12px ui-monospace,Consolas,monospace;fill:var(--tx)}.ar{stroke:var(--mu);stroke-width:1.5;fill:none}</style>
+<rect class="w" x="10" y="4" width="190" height="78" rx="4"/><rect x="10" y="4" width="190" height="14" fill="var(--a)"/>
+<rect x="20" y="24" width="170" height="10" rx="5" fill="none" stroke="var(--ln)"/><path d="M20 46h130M20 56h90" stroke="var(--a)" stroke-width="5" stroke-linecap="round" opacity=".55"/><text class="s" x="20" y="76">Browser: waits for the network</text>
+<rect class="w" x="225" y="4" width="190" height="78" rx="4"/><rect x="225" y="4" width="190" height="14" fill="var(--b)"/>
+<path d="M235 28h60M245 38h110M245 48h80" stroke="var(--b)" stroke-width="5" stroke-linecap="round" opacity=".55"/><text class="s" x="235" y="76">Editor: waits for keystrokes</text>
+<rect class="w" x="440" y="4" width="190" height="78" rx="4"/><rect x="440" y="4" width="190" height="14" fill="var(--c)"/>
+<text class="m" x="450" y="38">$ ls -l</text><text class="m" x="450" y="54">$ _</text><text class="s" x="450" y="76">Terminal: waits for a command</text>
+<path class="ar" d="M105 84L285 104M320 84V104M535 84L355 104"/>
+<rect class="w" x="240" y="104" width="160" height="32" rx="4"/><text class="s" x="320" y="124" text-anchor="middle" style="fill:var(--tx)">one core, shared in turns</text>
+</svg>
+<p>This is what each machine does with them. Choose a machine:</p>
+<div class="ctl"><label>Machine <select id="rlm"><option value="1">1 core (concurrent, not parallel)</option><option value="16">16 cores (concurrent and parallel)</option></select></label><button id="rlo" aria-pressed="false">Show the other threads</button></div>
+<div id="lanes2" class="box" style="font:14px system-ui,sans-serif;overflow-x:auto"></div>
+<p class="mu" id="rlc" style="margin-top:8px"></p>
+<div class="two">
+<div class="box"><b>What it looks like</b>All three apps alive and responsive at once, as if each had its own machine.</div>
+<div class="box"><b>What happens</b>Short <span class="t" data-k="burst">bursts</span> of work, mostly gaps. The core is handed to whoever has work ready, and switched away the moment that work is done or its <span class="t" data-k="slice">slice</span> runs out.</div>
+</div>
+<p>Switching this fast is what makes the apps look simultaneous. On the example desktop PC described below (4.38 GHz), a core completes about 4.4 billion clock cycles per second, so a 10 ms <span class="t" data-k="slice">slice</span> (a value used in OSTEP’s examples) is roughly 44 million cycles. Nielsen Norman Group puts the limit for a system to feel as if it reacts instantly at about 0.1 second, so switching much faster than that looks simultaneous.</p>
+<p>A Task Manager reading from one real desktop PC shows how big the gap is (a single moment in time):</p>
+<div class="st"><div><b>16</b>cores</div><div><b>32</b><span class="t" data-k="logical">logical processors</span></div><div><b>236</b>processes</div><div><b>5,574</b>threads</div><div><b>4%</b>CPU in use</div></div>
+<p>5,574 threads share 32 <span class="t" data-k="logical">logical processors</span>, about 174 threads for each, yet only 4% of the CPU’s capacity was being used, which is about 1.3 logical processors’ worth of work (4% of 32). So nearly all of those threads were waiting. This is concurrency in its everyday form: thousands of things in progress, a handful actually executing at any instant. (The 32 come from <span class="t" data-k="smt">SMT</span>: each of the 16 cores presents two <span class="t" data-k="logical">logical processors</span>, and AMD lists the 5950X as 16 cores and 32 threads.)</p>
+<p class="mu">The drawing is simplified: real apps use far more than three threads. A real scheduler also tends to keep a thread on the same core, because the data it was using is still close by, but it may move the thread to balance the load (OSTEP covers this in its multiprocessor scheduling chapter).</p>
+</section>
+
+<h2>What a core is</h2>
+<p>A <span class="t" data-k="core">core</span> is one CPU. OSTEP describes a multicore processor as a chip with multiple CPU cores packed onto it. The chip is the <span class="t" data-k="processor">processor</span>; AMD lists the Ryzen 9 5950X (the example PC below) as 16 cores and 32 threads, which is why spec sheets quote both numbers.</p>
+<p>Without <span class="t" data-k="smt">SMT</span>, a core executes one thread at a time. With SMT, a core handles two threads simultaneously: Intel explains that the two threads share the core’s execution resources while some components, such as register files, are duplicated, and the operating system sees each thread as a <span class="t" data-k="logical">logical processor</span>. Because the resources are shared, the two logical processors of one core are not equivalent to two separate cores. A 4-core chip without SMT can run 4 threads at the same instant; with SMT, up to 8.</p>
+
+<h2>Who decides what runs where</h2>
+<p>A desktop PC can have hundreds of <span class="t" data-k="process">processes</span> and far fewer cores. The operating system’s <span class="t" data-k="scheduler">scheduler</span> hands out the cores in short <em>time <span class="t" data-k="slice">slices</span></em>. This is <em>time sharing</em>, the technique the OSTEP textbook uses to explain how an OS virtualizes the CPU: each program gets the illusion of having its own. To move a core from program X to program Y, the OS saves X’s registers and program counter (its <span class="t" data-k="context">context</span>) and loads Y’s. That is a context switch. The OS can also take the core back by force, which is <span class="t" data-k="preempt">preemption</span>.</p>
+<p>So on one core there is <em>concurrency without parallelism</em>: fast switching looks simultaneous but is not. On several cores there are both.</p>
+
+<h2>Process vs thread</h2>
+<p>POSIX defines a <span class="t" data-k="process">process</span> as an address space with one or more threads executing within it, plus the system resources those threads need. A <span class="t" data-k="thread">thread</span> is a single flow of control within a process, and many of the process’s resources are shared among all its threads. A <code>fork()</code> call creates a new <em>process</em> that is an exact copy of the caller, so parent and child have separate memory, including any text still waiting in an output buffer. Threads of one process share memory, and OSTEP’s concurrency chapters explain that updating shared data without coordination leads to race conditions.</p>
+
+<h2>Reading fork() output</h2>
+<ul>
+<li>After <code>fork()</code>, parent and child are two independent processes: that is concurrency.</li>
+<li>If the scheduler puts them on different cores they also run in parallel; on one core they take turns. A program cannot tell which, and must not depend on it.</li>
+<li>The order of their <code>printf</code> calls is therefore <em>nondeterministic</em>: it can change from run to run. That is how output such as <code>mini$ child here</code> ends up on one line: a shell prompt and a child’s text share one terminal.</li>
+</ul>
+
+<h3 class="fh">The same idea in six languages</h3>
+<p>Only some languages expose the real <span class="t" data-k="fork">fork</span> call. C (through POSIX) and Python on POSIX systems do. Node.js, Java, Go and C# offer something different: a way to start a new program as a child process. In every case two processes end up running concurrently, which is the idea this page is about, but the child does not begin as a copy of the parent. Each tab says which case it is and why. Nothing is compiled in the page: save the file shown and run the listed command.</p>
+<div class="fk" id="fk"><div role="tablist" aria-label="Language"></div><div role="tabpanel" tabindex="0"></div></div>
+<p class="mu">The <code>echo</code> command used by the Java, Go and C# examples is an executable on Linux and macOS. The Go documentation notes that its own examples assume a Unix system and may not run on Windows; on Windows, substitute any real program.</p>
+<script type="text/plain" id="src-c">
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+int main(void)
+{
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        printf("child  %d (parent %d)\n", getpid(), getppid());
+    } else {
+        printf("parent %d made child %d\n", getpid(), pid);
+        wait(NULL);
+    }
+    return 0;
+}
+</script>
+<script type="text/plain" id="src-py">
+import os
+
+pid = os.fork()
+
+if pid == 0:
+    print(f"child  {os.getpid()} (parent {os.getppid()})")
+else:
+    print(f"parent {os.getpid()} made child {pid}")
+    os.wait()
+</script>
+<script type="text/plain" id="src-js">
+const { fork } = require('node:child_process');
+
+if (process.argv[2] === 'child') {
+  console.log(`child  ${process.pid} (parent ${process.ppid})`);
+} else {
+  const child = fork(__filename, ['child']);
+  console.log(`parent ${process.pid} made child ${child.pid}`);
+}
+</script>
+<script type="text/plain" id="src-java">
+public class Fork {
+    public static void main(String[] args) throws Exception {
+        Process child = new ProcessBuilder("echo", "hello from the child program")
+                .inheritIO()
+                .start();
+        System.out.println("parent " + ProcessHandle.current().pid()
+                + " started child " + child.pid());
+        child.waitFor();
+    }
+}
+</script>
+<script type="text/plain" id="src-go">
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+)
+
+func main() {
+	cmd := exec.Command("echo", "hello from the child program")
+	cmd.Stdout = os.Stdout
+
+	if err := cmd.Start(); err != nil {
+		panic(err)
+	}
+	fmt.Printf("parent %d started child %d\n", os.Getpid(), cmd.Process.Pid)
+	cmd.Wait()
+}
+</script>
+<script type="text/plain" id="src-cs">
+using System;
+using System.Diagnostics;
+
+var info = new ProcessStartInfo("echo", "hello from the child program")
+{
+    UseShellExecute = false
+};
+
+using var child = Process.Start(info)!;
+Console.WriteLine($"parent {Process.GetCurrentProcess().Id} started child {child.Id}");
+child.WaitForExit();
+</script>
+
+<h2>Caveats worth knowing</h2>
+<ul>
+<li><strong>The words are not fully settled.</strong> Pike (“Go Concurrency Patterns”, 2012) defines concurrency as the composition of independently executing computations, a way to structure software, and says it is not parallelism although it enables it. The Silberschatz, Galvin and Gagne textbook <em>Operating System Concepts</em> (chapter 4) says concurrency supports more than one task making progress, while parallelism means a system can perform more than one task simultaneously. The wording differs, but both agree that a single processor can be concurrent without being parallel; Pike states it directly.</li>
+<li><strong>More cores do not mean proportionally more speed.</strong> The Go FAQ says it depends on the problem; see the “4 processors” paradox above.</li>
+<li><strong>Everyday English can mislead.</strong> Oxford Learner’s Dictionaries defines concurrent as happening at the same time, so the everyday word already suggests simultaneity, whereas in computing it is used for tasks in progress over the same period even if they do not execute at the same instant.</li>
+</ul>
+
+<h2>Word origins</h2>
+<p class="mu">Origins are taken from Etymonline (etymonline.com); “concurrent” was also checked against Oxford Learner’s Dictionaries. Entries for initialisms and modern coinages (cpu, pid, goroutine) explain their parts. A sentence after the citation is this page’s own gloss, linking the old meaning to the technical one.</p>
+<dl id="gl"></dl>
+
+<h2>Sources</h2>
+<ul class="mu">
+<li>Rob Pike, “Go Concurrency Patterns” (Google I/O 2012): go.dev/talks/2012/concurrency.slide; and “Concurrency is not Parallelism” (Waza 2012)</li>
+<li>The Go FAQ, “Why doesn’t my program run faster with more CPUs?”: go.dev/doc/faq. The Go Programming Language Specification, “An example package” (the concurrent prime sieve): go.dev/ref/spec</li>
+<li>Arpaci-Dusseau and Arpaci-Dusseau, <em>Operating Systems: Three Easy Pieces</em> (University of Wisconsin): pages.cs.wisc.edu/~remzi/OSTEP/ (process, limited direct execution, scheduling, multi-level feedback queue, multiprocessor scheduling)</li>
+<li>Silberschatz, Galvin and Gagne, <em>Operating System Concepts</em>, 10th edition (chapters on threads and CPU scheduling)</li>
+<li>POSIX.1-2024, The Open Group: fork(); Base Definitions, chapter 3 (process, thread). pubs.opengroup.org/onlinepubs/9799919799/</li>
+<li>Language documentation for the fork examples: Python, os.fork (docs.python.org/3/library/os.html); Node.js, child_process (nodejs.org/api/child_process.html); Oracle, Java SE 25, ProcessBuilder and Process; Go, os/exec (pkg.go.dev/os/exec); Microsoft Learn, System.Diagnostics.Process and file-based apps</li>
+<li>Intel, Hyper-Threading technology (Intel support documentation); AMD, Ryzen 9 5950X product specifications (amd.com)</li>
+<li>John L. Gustafson, “Reevaluating Amdahl’s Law”, Communications of the ACM, 1988</li>
+<li>Jakob Nielsen, “Response Times: The 3 Important Limits”, Nielsen Norman Group: nngroup.com/articles/response-times-3-important-limits/</li>
+<li>Word origins: Etymonline (etymonline.com) and Oxford Learner’s Dictionaries (“concurrent”)</li>
+</ul>
+</main>
+<div id="tip" hidden role="tooltip"></div>
+<script>
+var E={
+"concurrent":["Overlapping in time; in progress during the same period. Textbook wording: a concurrent system supports more than one task making progress.", "Late 14th century, “acting in conjunction, contributing to the same effect or event”, from Latin concurrere “to run together; clash”: con- “together” + currere “to run” (Etymonline, Oxford)."],
+"parallel":["Executing at the same instant. Pike: the simultaneous execution of (possibly related) computations.", "Greek parallēlos “beside one another”, from para allēlois: para- “beside” + allēlois “each other”. In geometry (1540s): lines in the same plane that never meet (Etymonline)."],
+"sequential":["One after another.", "1816, from sequence, from Medieval Latin sequentia “a following, a succession”, from Latin sequi “to follow” (Etymonline)."],
+"core":["One CPU on a chip that executes instructions. A multicore processor packs several cores onto one chip (OSTEP).", "Early 14th century, “heart or inmost part of anything” (especially an apple or pear); of uncertain origin, probably from Old French cor, coeur “core of fruit”, literally “heart”, from Latin cor “heart” (Etymonline). In a chip, the same image: its inmost working part."],
+"processor":["In OSTEP’s usage, the chip: a multicore processor has several CPU cores packed onto it.", "1909, “person or machine which performs a process”, an agent noun from process (v.) (Etymonline). See process."],
+"cpu":["Central processing unit: the part of a computer that executes a program’s instructions.", "An initialism for “central processing unit”; for the roots of its words, see processor."],
+"process":["An address space with one or more threads executing within it, plus the resources those threads need (POSIX).", "Early 14th century, “fact of being carried on”, from Old French proces “a journey; continuation, development”, from Latin processus “a going forward, advance, progress”, from procedere “go forward”: pro “forward” + cedere “to go” (Etymonline)."],
+"thread":["A single flow of control within a process; many of the process’s resources are shared among its threads (POSIX).", "Old English þræd “fine cord, especially when twisted”, from Proto-Germanic *thredu- “twisted yarn”; related to þrawan “to twist”, the source of throw. By the 1640s it was extended to “that which runs through the whole course of something” (Etymonline)."],
+"scheduler":["The part of the operating system that decides which ready process or thread runs next, and on which core.", "schedule: late 14th century, “slip of paper with writing on it”, from Late Latin schedula “strip of paper”, diminutive of Latin scheda “one of the strips forming a papyrus sheet”, from Greek skhidē “splinter”; the sense “printed timetable” dates from 1863 (Etymonline). A scheduler is one who schedules: here, the part that draws up the timetable of what runs when."],
+"context":["A thread’s saved state, including its register values and program counter, which the OS saves and restores on a context switch (OSTEP).", "Early 15th century, “a composition, the entire text of a writing”, from Latin contextus “a joining together”, from contexere “to weave together”: com “together” + texere “to weave” (Etymonline)."],
+"switch":["Changing which task a core runs.", "1590s, “slender riding whip”, probably from a Flemish or Low German word akin to Middle Dutch swijch “bough, twig”. The sense “device for changing the direction of a moving body from one course to another” is attested by 1797, for horse-drawn railways (Etymonline)."],
+"preempt":["The OS takes the core away from a running job before the job is done, for example when its time slice ends.", "pre-emption (c. 1600): “a purchase by one before an opportunity is offered to others”, from pre- “before” + emption “purchase”, from Latin emere “to buy”. The verb preempt (1830) is a back-formation; its broadcasting sense “set aside (a program) and replace it with another” (1965) is close to the OS meaning (Etymonline)."],
+"idle":["Not doing any work: a core or thread with nothing ready to run. Windows, for example, runs an idle thread when no other thread is runnable (Silberschatz et al.).", "Old English idel “empty, void; vain; worthless, useless”, of unknown deeper origin. The sense “not employed, not doing work” appears in late Old English for persons, from the 1520s for things and from 1805 for machinery (Etymonline)."],
+"burst":["A stretch of CPU execution between waits. OS textbooks describe a process as alternating between CPU execution and I/O wait: a CPU burst, then an I/O burst, and so on. OSTEP notes that interactive jobs are short-running and often give up the CPU, while CPU-bound jobs need a lot of CPU time.", "Old English berstan “break suddenly, shatter as a result of pressure from within”. The noun (1610s) meant “the act of breaking, a sudden issue”, and “break (into) sudden activity” is a late 14th century sense of the verb (Etymonline)."],
+"slice":["The fixed stretch of time a job may run before the scheduler is allowed to switch to another ready job; also called a scheduling quantum (OSTEP).", "c. 1300, “a splinter, a fragment”, from Old French escliz “splinter, broken piece of wood”, a back-formation from esclicier “to splinter, shatter”, from Frankish *slitan “to split” or another Germanic source; the same word as slit (Etymonline). A time slice is, by analogy, a thin piece cut from the core’s time."],
+"quantum":["Another name for a time slice (OSTEP: “scheduling quantum”).", "1610s, “sum, amount”, from Latin quantum “as much as; how much?”, neuter of quantus “as much” (Etymonline)."],
+"logical":["What the operating system counts as one place to run a thread. With SMT, one physical core appears as two logical processors that share the core’s execution resources, so the pair is not equivalent to two separate cores. Example desktop PC: 16 cores, 32 logical processors.", "Early 15th century, “based on reason”, from logic + -al; logic is from Greek logikē (technē) “the reasoning art”, from logikos “pertaining to speaking or reasoning”, from logos “reason, idea, word” (Etymonline). In this page’s usage, following Intel’s documentation, a logical processor is what the operating system sees, while a physical core is the hardware."],
+"smt":["Simultaneous multithreading: one core handles two threads at the same time by sharing its execution resources (Intel’s name for it is Hyper-Threading).", "simultaneous: 1650s, from Medieval Latin simultaneus, ultimately from Latin simul “at the same time”. multi-: from Latin multus “much, many”. thread: see thread (Etymonline)."],
+"pipeline":["A chain of stages where each stage’s output is the next stage’s input. The Go specification’s sieve “daisy-chains” filter processes together.", "1859, “continuous line of pipes”, from pipe + line (Etymonline). pipe: Old English pipe “wind instrument; tube for conveying water”, from Vulgar Latin *pipa, a back-formation from Latin pipare “to chirp or peep”. line: from Latin linea “linen thread, string”."],
+"goroutine":["A function started with Go’s go statement; the caller does not wait for it. Pike: thinking of it as a very cheap thread is not far off.", "A coinage of the Go project, started with the go keyword. Effective Go explains that they are called goroutines because the existing terms (threads, coroutines, processes, and so on) convey inaccurate connotations."],
+"synchronization":["Coordinating threads so shared data is accessed safely, typically with locks. OSTEP notes that as the number of CPUs grows, access to a synchronized shared structure becomes quite slow.", "synchronize: 1620s, from Greek synkhronizein “be of the same time”, from synkhronos “happening at the same time”: syn- “together” + khronos “time” (Etymonline)."],
+"cache":["A small, fast memory close to a core that holds copies of data from main memory (OSTEP).", "1797, “hiding place”, from French Canadian trappers’ slang “hiding place for stores and provisions”, a back-formation from French cacher “to hide, conceal” (Etymonline). In computing, the same image: a store of data kept close at hand."],
+"serial":["One step after another, never overlapping.", "1840, from series + -al; Latin series “row, chain, series, sequence, succession”, from serere “to join, link”: parts arranged in a row (Etymonline)."],
+"fork":["The system call that creates a new process. POSIX: the child is an exact copy of the caller, with a single thread.", "Old English forca “pitchfork, forked instrument”, from Latin furca “two-pronged fork; pitchfork”. As a verb (early 14th century) it meant “to divide in branches, go separate ways”; of rivers it is attested from 1753 and of roads from 1839 (Etymonline)."],
+"exec":["Replace the program running in the current process with another program (POSIX: the current process image is replaced by a new one).", "exec and execute share a root: execute (late 14th century, “to carry into effect”) comes from Latin exequi/exsequi “to follow out”: ex- “out” + sequi “to follow” (Etymonline)."],
+"ipc":["Inter-process communication: a channel for passing data between separate processes (Node.js opens one between parent and child).", "inter-: “between, among”, from Latin inter. process: see process. communication: early 15th century, from Latin communicatio “a making common, imparting”, from communicare “to share” (Etymonline)."],
+"pid":["Process ID: the number the operating system assigns to a process (Java: Process.pid() returns it).", "identifier: 1870, an agent noun from identify (1640s, “regard as the same”), from identity, ultimately from Latin idem “the same”. process: see process (Etymonline)."],
+"spawn":["To create a new process (Node.js: child_process.spawn()).", "Early 15th century, of a fish “to shed roe”, from Anglo-French espaundre “to spread out, pour out”, from Latin expandere “to spread out”. The notion is of a “spreading out” of fish eggs released in water (Etymonline)."]};
+var tip=document.getElementById("tip");
+function show(el){var d=E[el.dataset.k];if(!d)return;tip.innerHTML="<b>"+el.textContent+"</b>: "+d[0]+"<i>"+d[1]+"</i>";tip.hidden=false;var r=el.getBoundingClientRect(),x=Math.max(8,Math.min(r.left,innerWidth-tip.offsetWidth-8)),y=r.bottom+6;if(y+tip.offsetHeight>innerHeight-8)y=r.top-tip.offsetHeight-6;tip.style.left=x+"px";tip.style.top=y+"px"}
+function hide(){tip.hidden=true}
+function wire(el){el.tabIndex=0;el.onmouseenter=el.onfocus=function(){show(el)};el.onmouseleave=el.onblur=hide;el.onclick=function(){show(el)}}
+Array.prototype.forEach.call(document.querySelectorAll(".t"),wire);
+document.addEventListener("keydown",function(e){if(e.key=="Escape")hide()});
+var gl="";["concurrent","parallel","sequential","core","processor","cpu","process","thread","scheduler","context","switch","preempt","idle","burst","slice","quantum","logical","smt","pipeline","goroutine","synchronization","cache","serial","fork","exec","ipc","pid","spawn"].forEach(function(k){gl+="<dt>"+k+"</dt><dd>"+E[k][0]+"<br><i>"+E[k][1]+"</i></dd>"});
+document.getElementById("gl").innerHTML=gl;
+
+var N=4,shown=0,timer=null;
+function plan(m){var t=[],i;
+if(m=="seq"){for(i=0;i<N;i++)t.push(["A",""]);for(i=0;i<N;i++)t.push(["B",""])}
+else if(m=="conc"){for(i=0;i<N;i++){t.push(["A",""]);t.push(["B",""])}}
+else{for(i=0;i<N;i++)t.push(["A","B"])}return t}
+function span(p,s,k){var a=-1,b=-1;for(var i=0;i<s;i++)if(p[i][0]==k||p[i][1]==k){if(a<0)a=i;b=i}return[a,b]}
+function render(){var m=document.getElementById("mode").value,p=plan(m),h="",c,k,i,cell;
+for(c=0;c<2;c++){h+='<div class="row"><span>core '+(c+1)+'</span>';
+for(i=0;i<8;i++){k=i<shown&&i<p.length?p[i][c]:"";cell=k?" "+k:"";if(k&&c==0&&i>0&&p[i-1][0]&&p[i-1][0]!=k)cell+=" sw";h+='<div class="c'+cell+'">'+k+"</div>"}h+="</div>"}
+h+='<div class="tk">ticks 1 to 8, left to right</div>';document.getElementById("lanes").innerHTML=h;
+var A=span(p,shown,"A"),B=span(p,shown,"B"),con=A[0]>=0&&B[0]>=0&&A[0]<B[1]&&B[0]<A[1],par=false;
+for(i=0;i<shown&&i<p.length;i++)if(p[i][0]&&p[i][1])par=true;
+var el=document.getElementById("vc");el.className=con?"y":"";el.textContent=con?"Concurrent: A and B are both in progress at once.":"Concurrent: not yet.";
+el=document.getElementById("vp");el.className=par?"y":"";el.textContent=par?"Parallel: two cores busy in the same tick.":"Parallel: no tick has two cores busy.";
+document.getElementById("vt").textContent="Done after "+(shown>=p.length?p.length+" ticks":"…")+" ("+Math.min(shown,p.length)+" shown)"}
+function stop(){clearInterval(timer);timer=null;document.getElementById("play").textContent="Play"}
+function step(){var n=plan(document.getElementById("mode").value).length;if(shown<n)shown++;render();if(shown>=n)stop()}
+function reset(){stop();shown=0;render()}
+document.getElementById("step").onclick=step;document.getElementById("reset").onclick=reset;document.getElementById("mode").onchange=reset;
+document.getElementById("play").onclick=function(){if(timer){stop();return}if(shown>=plan(document.getElementById("mode").value).length)shown=0;this.textContent="Pause";timer=setInterval(step,700)};
+(function(){
+var T=function(k,w){return "<span class='t' data-k='"+k+"'>"+w+"</span>"};
+var FK=[
+{id:"c",n:"C",fn:"fork.c",real:1,sub:"POSIX system call",cmd:"gcc fork.c -o fork && ./fork",out:"parent 155 made child 156\nchild  156 (parent 155)",
+rel:"This is the real call. POSIX says "+T("fork","fork()")+" creates a new process that is an exact copy of the caller, with a single thread, and returns 0 in the child and the child’s "+T("pid","pid")+" in the parent.",
+carry:"Everything else on this page: the two branches, the unpredictable output order, and wait() to collect the child.",
+doc:"POSIX fork(): pubs.opengroup.org/onlinepubs/9799919799/functions/fork.html"},
+{id:"py",n:"Python",fn:"fork.py",real:1,sub:"Unix only",cmd:"python3 fork.py",out:"parent 157 made child 158\nchild  158 (parent 157)",
+rel:"os.fork() forks a child process, returning 0 in the child and the child’s process id in the parent. The current Python documentation lists it as available on POSIX only (not WASI, Android or iOS). Since Python 3.12 it raises a DeprecationWarning when Python detects that the process has several threads.",
+carry:"The same <code>if pid == 0</code> pattern, almost line for line.",
+doc:"Python documentation, os.fork(): docs.python.org/3/library/os.html"},
+{id:"js",n:"JavaScript",fn:"fork.js",real:0,sub:"starts a new Node.js process",cmd:"node fork.js",out:"parent 159 made child 166\nchild  166 (parent 159)",
+rel:"child_process.fork() borrows the name but, as the Node.js documentation says, unlike the fork(2) system call it does not clone the current process. It is a special case of "+T("spawn","spawn")+"() for starting new Node.js processes, each with its own memory and V8 instance; the only link between parent and child is an "+T("ipc","IPC")+" channel. The child therefore starts at the top of the script, so the script checks its arguments to learn which role it plays (the pattern the Node.js documentation’s own example uses).",
+carry:"Two independent processes with their own pids, running concurrently. The IPC channel is extra: it lets parent and child exchange messages.",
+doc:"Node.js documentation, child_process: nodejs.org/api/child_process.html"},
+{id:"java",n:"Java",fn:"Fork.java",real:0,sub:"starts a different program",cmd:"java Fork.java",runnote:"Source-file mode, JDK 11 or later.",out:"parent 177 started child 191\nhello from the child program",
+rel:"Java’s API has no fork(). ProcessBuilder is the class used to create operating system processes: start() creates a new Process that runs the given command (here echo). Oracle’s documentation says starting an operating system process is highly system-dependent and does not describe how it is done internally, so this tab claims no more than that the child is a separate program (compare "+T("exec","exec")+"), not a copy of the running JVM.",
+carry:"child.pid() returns the operating system’s process ID, waitFor() waits for the process to end (the role wait() plays in C), and inheritIO() lets the child share the parent’s terminal, so the output order can vary.",
+doc:"Oracle, Java SE 25 API: java.lang.ProcessBuilder and java.lang.Process (docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/ProcessBuilder.html)"},
+{id:"go",n:"Go",fn:"fork.go",real:0,sub:"starts a different program",cmd:"go run fork.go",out:"parent 201 started child 207\nhello from the child program",
+rel:"Go’s standard library has no fork() wrapper. The os/exec package runs external commands: per its documentation it wraps os.StartProcess. Only the new command is the child; the parent keeps running its own code.",
+carry:"Start() launches the child without waiting for it, cmd.Process.Pid is its process ID, and Wait() collects it and releases its resources (the documentation says Wait must be called after a successful Start). Parent and child run concurrently.",
+doc:"Go standard library, os/exec: pkg.go.dev/os/exec"},
+{id:"cs",n:"C#",fn:"fork.cs",real:0,sub:"starts a different program",cmd:"dotnet run fork.cs",runnote:"Needs the .NET 10 SDK or later (file-based apps). With an older SDK, create a console project with dotnet new console and paste the code into Program.cs.",out:"parent 233 started child 240\nhello from the child program",
+rel:"C#’s API has no fork(). Microsoft describes the System.Diagnostics.Process class as the primary way to create and interact with processes in .NET. Process.Start starts a process resource and associates it with a Process component; it launches the program named in ProcessStartInfo and does not copy the running process.",
+carry:"Process.Id is the system-generated process identifier, WaitForExit() makes the current thread wait until the process ends, and parent and child run concurrently, so the output order can vary.",
+doc:"Microsoft Learn, System.Diagnostics.Process.Start and .NET file-based apps: learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process.start"}];
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+var root=document.getElementById("fk"),tabs=root.children[0],pane=root.children[1];
+function pick(i){var d=FK[i],j;
+for(j=0;j<tabs.children.length;j++){tabs.children[j].setAttribute("aria-selected",j==i?"true":"false");tabs.children[j].tabIndex=j==i?0:-1}
+pane.setAttribute("aria-labelledby","tab-"+d.id);
+pane.innerHTML='<span class="bd'+(d.real?"":" no")+'">'+(d.real?"Real fork()":"Not a fork")+'</span> <span class="mu">'+d.sub+'</span>'
++'<p class="mu" style="margin-bottom:0">Save as <code>'+d.fn+'</code></p>'
++'<pre><code>'+esc(document.getElementById("src-"+d.id).textContent.trim())+'</code></pre>'
++'<p><strong>Run:</strong> <code>'+esc(d.cmd)+'</code>'+(d.runnote?' <span class="mu">'+d.runnote+'</span>':'')+'</p>'
++'<p><strong>Typical output</strong> (pids differ, and line order can vary):</p><pre><code>'+esc(d.out)+'</code></pre>'
++'<p><strong>How it relates to fork.</strong> '+d.rel+'</p>'
++'<p><strong>What carries over.</strong> '+d.carry+'</p>'
++'<p class="mu"><strong>Official docs:</strong> '+d.doc+'</p>';
+Array.prototype.forEach.call(pane.querySelectorAll(".t"),wire)}
+FK.forEach(function(d,i){var b=document.createElement("button");b.type="button";b.id="tab-"+d.id;b.setAttribute("role","tab");b.textContent=d.n;
+b.onclick=function(){pick(i)};
+b.onkeydown=function(e){var j=e.key=="ArrowRight"?(i+1)%FK.length:e.key=="ArrowLeft"?(i+FK.length-1)%FK.length:-1;if(j>=0){pick(j);tabs.children[j].focus();e.preventDefault()}};
+tabs.appendChild(b)});
+pick(0)})();
+var CS="BBBE..TTB..BEB..TBB.E...",N2=24,PP={B:[0,1,2,7,10,11,14,18,19],E:[2,5,10,13,19,21],T:[4,5,11,16,17]},OT=[1,4,5,9,12,15,18,21,22],ON=false;
+function lcg(s){return function(){s=s*48271%2147483647;return s/2147483647}}
+function blank(){var a=[],i;for(i=0;i<N2;i++)a.push("");return a}
+function cell(s){var c=s.charAt(0);return'<div class="c'+(c?" k"+c:"")+(s.length>1?" wt":"")+'">'+(c&&c!="X"?c:"")+"</div>"}
+function line(l,a,sm){var h='<div class="row'+(sm?" sm":"")+'"><span>'+l+"</span>",i;for(i=0;i<N2;i++)h+=cell(a[i]);return h+"</div>"}
+function one(){var a=[],q=[],i,t;for(i=0;i<N2;i++){if(CS.charAt(i)!=".")q.push([CS.charAt(i),i]);if(ON&&OT.indexOf(i)>=0)a.push("X");else if(q.length){t=q.shift();a.push(t[0]+(t[1]<i?"w":""))}else a.push("")}return a}
+function par(k){var a=blank(),i;for(i=0;i<PP[k].length;i++)a[PP[k][i]]=k;return a}
+function sprinkle(a,seed,d){var r=lcg(seed),i;for(i=0;i<N2;i++)if(!a[i]&&r()<d)a[i]="X";return a}
+function rl(){var m=document.getElementById("rlm").value,h="",c,i;
+if(m=="1"){h=line("core 1",one());
+c=ON?"Gray = all the other threads on the machine, squeezed onto one core. Where a gray <span class='t' data-k='burst'>burst</span> and an app collide, the app waits for the next free <span class='t' data-k='slice'>slice</span> (dashed outline = a delayed burst). That waiting is what contention looks like. On the example PC it is rare, because there are 32 <span class='t' data-k='logical'>logical processors</span> and most threads are idle. Gray is drawn denser than real so that it stays visible.":"B = browser, E = editor, T = terminal, empty = idle. One core hops between the apps in short <span class='t' data-k='slice'>slices</span>, and each hop is a context switch. Gaps are idle time. OSTEP notes that a job waiting for the keyboard or mouse gives up the CPU before its allotted time is used up, so gaps like these are normal."}
+else if(!ON){h=line("core 1",par("B"))+line("core 2",par("E"))+line("core 3",par("T"))+'<div class="row"><span>cores 4 to 16</span><span style="width:auto">idle</span></div>';
+c="Same kinds of <span class='t' data-k='burst'>bursts</span>, but each app has a core of its own. Where two letters line up in the same column, those two really run in parallel. The apps never wait for a core here."}
+else{h=line("core 1",sprinkle(par("B"),7,.12),1)+line("core 2",sprinkle(par("E"),11,.12),1)+line("core 3",sprinkle(par("T"),13,.12),1);for(i=4;i<=16;i++)h+=line("core "+i,sprinkle(blank(),i*17,.07),1);
+c="Gray = all the other threads (unnamed, and drawn denser than real so that they stay visible). Threads far outnumber cores, but at 4% utilization most cores are idle at any moment, so a ready thread will usually find a free core and there is little fighting over cores. Threads still keep blocking and becoming ready again, and each change means the scheduler decides again what runs where. Competition for cores grows when many threads are ready at once, for example in a big compile or a video encode."}
+document.getElementById("lanes2").innerHTML=h;var r=document.getElementById("rlc");r.innerHTML=c;Array.prototype.forEach.call(r.querySelectorAll(".t"),wire)}
+document.getElementById("rlm").onchange=rl;
+document.getElementById("rlo").onclick=function(){ON=!ON;this.setAttribute("aria-pressed",ON);this.textContent=ON?"Hide the other threads":"Show the other threads";rl()};
+rl();
+render();
+</script></body></html>

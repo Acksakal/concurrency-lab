@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thread Paths</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--ink:#1b1f24;--mute:#5f6873;--line:#dde1e6;--code:#fbfbfc;
+  --main:#7656f0;--t1:#1f7fe0;--t2:#d9730d;--bad:#d64545;--wait:#5b7fa6;--ok:#1f9d55;--hl:#fff3c4;
+  --kw:#a626a4;--fn:#0b7a75;--str:#50a14f;--cm:#8a919a;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--line:#2d3238;--code:#15181b;
+  --main:#9d87ff;--t1:#5aa9ff;--t2:#ffa24d;--bad:#ff6b6b;--wait:#8fb0d6;--ok:#4cc38a;--hl:#3b3420;
+  --kw:#d38cf0;--fn:#4fd1c5;--str:#9bd47f;--cm:#7d858f;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif;padding-bottom:70px}
+h1{font-size:18px;margin:0}
+a{color:var(--t1)}
+.wrap{max-width:1400px;margin:0 auto;padding:12px 16px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit}
+.tabs button.on{border-color:var(--main);box-shadow:inset 0 0 0 1px var(--main);font-weight:600}
+.tabs button .star{color:var(--ok);margin-left:4px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.panel h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+.intro{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin:12px 0}
+.story p{margin:0 0 6px}
+details summary{cursor:pointer;color:var(--mute)}
+details ul{margin:6px 0 0;padding-left:18px}
+.missions ul{list-style:none;margin:0;padding:0}
+.missions li{padding:4px 0 4px 24px;position:relative}
+.missions li::before{content:"";position:absolute;left:2px;top:7px;width:13px;height:13px;border:2px solid var(--line);border-radius:4px}
+.missions li.won::before{background:var(--ok);border-color:var(--ok)}
+.missions li.won{color:var(--mute)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:12px}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* code */
+.code{background:var(--code);border:1px solid var(--line);border-radius:8px;font:12.5px/1.55 Consolas,"Cascadia Mono",monospace;max-height:560px;overflow:auto;padding:6px 0}
+.ln{display:flex;white-space:pre;border-left:3px solid transparent}
+.ln .gut{width:34px;flex:none;display:flex;gap:2px;justify-content:flex-end;align-items:center;padding-right:3px}
+.ln .no{width:26px;flex:none;text-align:right;color:var(--cm);padding-right:10px;user-select:none}
+.ln .src{padding-right:12px}
+.ln.last{background:var(--hl)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.k{color:var(--kw)}.f{color:var(--fn)}.s{color:var(--str)}.c{color:var(--cm);font-style:italic}
+/* memory */
+.mem{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.box{border:1px dashed var(--line);border-radius:8px;padding:8px;min-height:74px}
+.box .ttl{font-size:12px;color:var(--mute);margin-bottom:4px}
+.big{font:600 30px/1 Consolas,monospace}
+.pulse{animation:pulse .5s}
+@keyframes pulse{0%{transform:scale(1.25);color:var(--t2)}100%{transform:scale(1)}}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;color:#fff;margin:2px 4px 2px 0}
+.muted{color:var(--mute);font-size:12px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:5px 10px;cursor:pointer;font:inherit}
+.btn:hover:not(:disabled){border-color:var(--main)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.pri{background:var(--main);border-color:var(--main);color:#fff}
+.btn.sm{padding:2px 8px;font-size:12px}
+/* lanes */
+.lanes{display:grid;grid-template-columns:200px minmax(0,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.lh{height:66px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:3px;background:var(--panel)}
+.lh:last-child,.row:last-child{border-bottom:none}
+.lh .nm{font-weight:600;display:flex;align-items:center;gap:6px}
+.lh .fnm{font:12px Consolas,monospace;color:var(--mute)}
+.lh .ln2{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.badge{font-size:11px;border-radius:5px;padding:1px 6px;border:1px solid var(--line)}
+.b-ready{color:var(--ok);border-color:var(--ok)}
+.b-blocked-mutex{color:var(--bad);border-color:var(--bad)}
+.b-cond-wait,.b-join-wait{color:var(--wait);border-color:var(--wait)}
+.b-done,.b-unborn{color:var(--mute)}
+.scroll{overflow-x:auto;border-left:1px solid var(--line)}
+.row{height:66px;display:flex;border-bottom:1px solid var(--line);position:relative}
+.cell{width:48px;flex:none;height:100%;position:relative;display:flex;align-items:center;justify-content:center}
+.cell.path::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;margin-top:-1.5px;background:var(--tc);opacity:.45}
+.cell.ran .blk{width:45px;height:30px;border-radius:5px;background:var(--tc);color:#fff;font:600 9.5px/30px Consolas,monospace;text-align:center;overflow:hidden;z-index:1}
+.cell.ran.bad .blk{background:var(--bad)}
+.cell.blocked-mutex::before{content:"";position:absolute;inset:16px 0;background:repeating-linear-gradient(45deg,var(--bad) 0 3px,transparent 3px 7px);opacity:.55}
+.cell.cond-wait::before{content:"z";position:absolute;inset:16px 0;background:repeating-linear-gradient(-45deg,var(--wait) 0 3px,transparent 3px 7px);opacity:.5;color:transparent}
+.cell.join-wait::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:3px dotted var(--wait)}
+.cell.born .blk{border:2px solid var(--tc);background:transparent;color:var(--tc)}
+.cell.cur{box-shadow:inset 0 0 0 1px var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mute);margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:22px;height:10px;display:inline-block;border-radius:2px}
+/* console + log */
+.split{display:grid;grid-template-columns:1fr 1.3fr;gap:12px}
+.term{background:#0d1117;color:#d2d8de;font:12.5px/1.5 Consolas,monospace;border-radius:8px;padding:8px 10px;height:220px;overflow:auto}
+.term .p{color:#7ee787}
+.log{height:220px;overflow:auto;font-size:13px}
+.log .e{padding:5px 6px;border-left:3px solid var(--tc,var(--line));margin-bottom:4px;border-radius:0 6px 6px 0;cursor:pointer}
+.log .e:first-child{background:var(--hl)}
+.log .e .n{color:var(--mute);font-size:11px;margin-right:4px}
+.log .e.win{border-left-color:var(--ok);font-weight:600}
+.log .e.alert{border-left-color:var(--bad)}
+.rule{border-left:3px solid var(--main);padding:6px 10px;margin-top:8px;font-size:13px}
+.rule b{display:block;margin-bottom:2px}
+.banner{padding:8px 12px;border-radius:8px;border:1px solid var(--ok);color:var(--ok);font-weight:600;display:none}
+/* controls */
+.ctrl{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);z-index:5}
+.ctrl .wrap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 16px}
+.ctrl label{font-size:12px;color:var(--mute);display:flex;align-items:center;gap:6px}
+.sp{flex:1}
+@media (max-width:980px){.intro,.grid,.split{grid-template-columns:1fr}.lanes{grid-template-columns:150px minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Thread Paths <span class="muted">— POSIX threads seen from main()'s point of view</span></h1>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+
+  <section class="intro">
+    <div class="panel story">
+      <h2 id="lvlTitle">Story</h2>
+      <div id="story"></div>
+      <details>
+        <summary>What is a thread, in POSIX terms?</summary>
+        <ul>
+          <li><b>Process</b> = the running program: one address space (globals, heap, code) plus at least one thread.</li>
+          <li><b>Thread</b> = one flow of control inside that process. Each thread has its <i>own</i> ID, stack (local variables), registers, program counter and <code>errno</code>.</li>
+          <li>Everything with an address (globals like <code>count</code>, <code>malloc</code> memory, even another thread's locals if you pass a pointer) is reachable by <i>all</i> threads of the process. That sharing is the power and the danger.</li>
+          <li>When the program starts there is exactly one thread: the one running <code>main()</code> (the <i>initial thread</i>). That's you.</li>
+          <li>Which runnable thread moves next is decided by the scheduler, not by your code. On a multi-core CPU threads even run at the same moment; this page shows one step at a time, which is the standard way to reason about every possible interleaving.</li>
+        </ul>
+        <p class="muted">Source: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap03.html" target="_blank" rel="noopener">POSIX.1-2024, Base Definitions ch. 3 ("Thread")</a></p>
+      </details>
+    </div>
+    <div class="panel missions">
+      <h2>Missions</h2>
+      <ul id="missions"></ul>
+      <p class="muted" style="margin:8px 0 0">Tip: <b>you</b> can be the scheduler. Click <b>▶ run</b> on a thread's lane to make exactly that thread take its next step.</p>
+    </div>
+  </section>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="grid" style="margin-top:12px">
+    <div class="col">
+      <div class="panel">
+        <h2>Source code <span class="muted" style="text-transform:none;letter-spacing:0">— coloured dots show where each thread will execute next</span></h2>
+        <div class="code" id="code"></div>
+      </div>
+      <div class="panel">
+        <h2>Rulebook (what POSIX says)</h2>
+        <div id="rule" class="rule"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <h2>Shared memory of the process (every thread sees this)</h2>
+        <div class="mem" id="mem"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Paths — one lane per thread, time flows left → right</h2>
+        <div class="lanes">
+          <div id="heads"></div>
+          <div class="scroll" id="scroll"><div id="rows"></div></div>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--main)"></i>ran a step</span>
+          <span><i class="sw" style="background:linear-gradient(var(--main),var(--main)) center/100% 3px no-repeat;opacity:.6"></i>runnable, waiting for CPU</span>
+          <span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--bad) 0 3px,transparent 3px 7px)"></i>blocked on mutex</span>
+          <span><i class="sw" style="background:repeating-linear-gradient(-45deg,var(--wait) 0 3px,transparent 3px 7px)"></i>asleep on condition variable</span>
+          <span><i class="sw" style="border-top:3px dotted var(--wait);height:0"></i>waiting in pthread_join</span>
+        </div>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <h2>stdout</h2>
+          <div class="term" id="term"></div>
+        </div>
+        <div class="panel">
+          <h2>What just happened (newest first — click for the rule)</h2>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ctrl">
+  <div class="wrap">
+    <button class="btn" id="bReset" title="Restart this level with the same scheduler seed">⟲ Reset</button>
+    <button class="btn" id="bShuffle" title="Restart with a new random scheduler">🎲 New scheduler</button>
+    <button class="btn" id="bBack" title="Undo one step (←)">◀ Back</button>
+    <button class="btn pri" id="bStep" title="The scheduler picks a thread and runs one step (Space / →)">Step ▶</button>
+    <button class="btn" id="bPlay" title="Auto-play (P)">▶▶ Play</button>
+    <label>speed <input type="range" id="speed" min="1" max="10" value="5"></label>
+    <label title="How eager the scheduler is to switch to another thread on each step">scheduler switches <input type="range" id="chaos" min="0" max="100" value="35"> <span id="chaosV">35%</span></label>
+    <span class="sp"></span>
+    <span class="muted" id="seed"></span>
+  </div>
+</div>
+
+<!-- ======================= C SOURCES (tags @@x mark lines for the simulator) ======================= -->
+<script type="text/plain" id="code-L1">
+#include <pthread.h>
+#include <stdio.h>
+
+void *hello(void *arg)          /* the new thread starts HERE */
+{
+    (void)arg;
+    printf("Hello from the new thread!\n");@@hp
+    return NULL;                 /* = pthread_exit(NULL) */@@hr
+}
+
+int main(void)                  /* the initial thread starts HERE */
+{
+    pthread_t t1;
+
+    printf("main: starting\n");@@m0
+    pthread_create(&t1, NULL, hello, NULL);@@mc
+    printf("main: thread created\n");@@m1
+    pthread_join(t1, NULL);@@mj
+    printf("main: thread finished, exiting\n");@@m2
+    return 0;                    /* = exit(0): ends the WHOLE process */@@mr
+}
+</script>
+
+<script type="text/plain" id="code-L2">
+#include <pthread.h>
+#include <stdio.h>
+
+int count = 0;          /* ONE copy, shared by every thread */
+
+void *worker(void *arg)
+{
+    (void)arg;
+    /* "count++;" is really three CPU steps: */
+    int reg = count;    /* 1. load   (reg is private) */@@ld
+    reg = reg + 1;      /* 2. add                     */@@add
+    count = reg;        /* 3. store                   */@@st
+    return NULL;@@ret
+}
+
+int main(void)
+{
+    pthread_t t1, t2;
+
+    pthread_create(&t1, NULL, worker, NULL);@@c1
+    pthread_create(&t2, NULL, worker, NULL);@@c2
+    pthread_join(t1, NULL);@@j1
+    pthread_join(t2, NULL);@@j2
+    printf("count = %d (expected 2)\n", count);@@pr
+    return 0;@@mr
+}
+</script>
+
+<script type="text/plain" id="code-L3">
+#include <pthread.h>
+#include <stdio.h>
+
+int count = 0;
+pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+
+void *worker(void *arg)
+{
+    (void)arg;
+    pthread_mutex_lock(&m);         /* enter critical section */@@lk
+    int reg = count;    /* 1. load  */@@ld
+    reg = reg + 1;      /* 2. add   */@@add
+    count = reg;        /* 3. store */@@st
+    pthread_mutex_unlock(&m);       /* leave critical section */@@ul
+    return NULL;@@ret
+}
+
+int main(void)
+{
+    pthread_t t1, t2;
+
+    pthread_create(&t1, NULL, worker, NULL);@@c1
+    pthread_create(&t2, NULL, worker, NULL);@@c2
+    pthread_join(t1, NULL);@@j1
+    pthread_join(t2, NULL);@@j2
+    printf("count = %d (expected 2)\n", count);@@pr
+    return 0;@@mr
+}
+</script>
+
+<script type="text/plain" id="code-L4">
+#include <pthread.h>
+#include <stdio.h>
+
+#define COUNT_DONE 10
+#define COUNT_HALT1 3
+#define COUNT_HALT2 6
+
+pthread_mutex_t count_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condition_cond = PTHREAD_COND_INITIALIZER;
+
+int count = 0;
+
+void *functionCount1(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        pthread_mutex_lock(&count_mutex);@@a_lock
+
+        while (count >= COUNT_HALT1 &&@@a_while
+               count <= COUNT_HALT2) {
+            pthread_cond_wait(&condition_cond, &count_mutex);@@a_wait
+        }
+
+        if (count >= COUNT_DONE) {@@a_if
+            pthread_mutex_unlock(&count_mutex);@@a_exu
+            return NULL;@@a_exr
+        }
+
+        count++;@@a_inc
+        printf("Counter value functionCount1: %d\n", count);@@a_pr
+
+        pthread_mutex_unlock(&count_mutex);@@a_ul
+    }
+}
+
+void *functionCount2(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        pthread_mutex_lock(&count_mutex);@@b_lock
+
+        if (count >= COUNT_DONE) {@@b_if
+            pthread_cond_broadcast(&condition_cond);@@b_bc
+            pthread_mutex_unlock(&count_mutex);@@b_exu
+            return NULL;@@b_exr
+        }
+
+        count++;@@b_inc
+        printf("Counter value functionCount2: %d\n", count);@@b_pr
+
+        pthread_mutex_unlock(&count_mutex);@@b_ul
+    }
+}
+
+int main(void)
+{
+    pthread_t t1, t2;
+
+    if (pthread_create(&t1, NULL, functionCount1, NULL) != 0)@@c1
+        return 1;
+
+    if (pthread_create(&t2, NULL, functionCount2, NULL) != 0) {@@c2
+        pthread_join(t1, NULL);
+        return 1;
+    }
+
+    pthread_join(t1, NULL);@@j1
+    pthread_join(t2, NULL);@@j2
+
+    return 0;@@mr
+}
+</script>
+
+<script type="text/plain" id="code-L5">
+#include <pthread.h>
+#include <stdio.h>
+
+#define COUNT_DONE 10
+#define COUNT_HALT1 3
+#define COUNT_HALT2 6
+
+pthread_mutex_t count_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condition_cond = PTHREAD_COND_INITIALIZER;
+
+int count = 0;
+
+void *functionCount1(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        pthread_mutex_lock(&count_mutex);@@a_lock
+
+        while (count >= COUNT_HALT1 &&@@a_while
+               count <= COUNT_HALT2) {
+            pthread_cond_wait(&condition_cond, &count_mutex);@@a_wait
+        }
+
+        if (count >= COUNT_DONE) {@@a_if
+            pthread_mutex_unlock(&count_mutex);@@a_exu
+            return NULL;@@a_exr
+        }
+
+        count++;@@a_inc
+        printf("Counter value functionCount1: %d\n", count);@@a_pr
+
+        pthread_mutex_unlock(&count_mutex);@@a_ul
+    }
+}
+
+void *functionCount2(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        pthread_mutex_lock(&count_mutex);@@b_lock
+
+        if (count >= COUNT_DONE) {@@b_if
+            pthread_cond_broadcast(&condition_cond);@@b_bc
+            pthread_mutex_unlock(&count_mutex);@@b_exu
+            return NULL;@@b_exr
+        }
+
+        count++;@@b_inc
+        printf("Counter value functionCount2: %d\n", count);@@b_pr
+
+        /* NEW: once count has left the 3..6 window, ring the bell */
+        if (count > COUNT_HALT2)@@b_sigif
+            pthread_cond_signal(&condition_cond);@@b_sig
+
+        pthread_mutex_unlock(&count_mutex);@@b_ul
+    }
+}
+
+int main(void)
+{
+    pthread_t t1, t2;
+
+    if (pthread_create(&t1, NULL, functionCount1, NULL) != 0)@@c1
+        return 1;
+
+    if (pthread_create(&t2, NULL, functionCount2, NULL) != 0) {@@c2
+        pthread_join(t1, NULL);
+        return 1;
+    }
+
+    pthread_join(t1, NULL);@@j1
+    pthread_join(t2, NULL);@@j2
+
+    return 0;@@mr
+}
+</script>
+
+<script id="app">
+"use strict";
+/* ============================== ENGINE ============================== */
+const DOCS = {
+  thread:{t:'Thread (POSIX definition)',u:'https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap03.html',
+    x:'A thread is a single flow of control within a process. Each thread has its own ID, stack, registers and errno; everything addressable in the process (globals, static data, malloc memory) is accessible to all of its threads.'},
+  create:{t:'pthread_create()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_create.html',
+    x:'Creates a new thread in the same process that starts by running start_routine(arg). On success it returns 0 and stores the new thread\'s ID. If start_routine returns, that thread ends as if it called pthread_exit() with the return value.'},
+  exitmain:{t:'Returning from main()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_create.html',
+    x:'The initial thread is special: returning from main() acts like calling exit() with main\'s return value. That ends the whole process, including any threads still running. This is why main joins its threads first.'},
+  join:{t:'pthread_join()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_join.html',
+    x:'Suspends the calling thread until the target thread has terminated (returns at once if it already has). It is the "wait at the finish line" operation.'},
+  lock:{t:'pthread_mutex_lock()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_mutex_lock.html',
+    x:'Locks the mutex. If another thread already holds it, the caller blocks until it becomes available. On return, the caller owns the mutex. Holding a mutex does NOT stop the scheduler from pausing you; it only stops others from entering.'},
+  unlock:{t:'pthread_mutex_unlock()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_mutex_lock.html',
+    x:'Releases the mutex. If threads are blocked on it, the scheduling policy decides which one acquires it next; arrival order is not guaranteed.'},
+  cwait:{t:'pthread_cond_wait()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_cond_wait.html',
+    x:'Must be called with the mutex locked. Atomically releases the mutex and puts the thread to sleep on the condition variable. Before returning it re-acquires the mutex. Spurious wake-ups may occur and a return says nothing about your condition, so always re-check it in a while loop.'},
+  signal:{t:'pthread_cond_signal() / pthread_cond_broadcast()',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_cond_broadcast.html',
+    x:'signal unblocks at least one thread sleeping on the condition variable; broadcast unblocks all of them. If no thread is sleeping, they have no effect: a condition variable has no memory, so a signal nobody hears is simply lost.'},
+  race:{t:'Data races (Memory Synchronization)',u:'https://pubs.opengroup.org/onlinepubs/9799919799/functions/V2_chap04.html',
+    x:'POSIX requires applications to make sure that no thread reads or modifies a memory location while another thread may be modifying it, by using synchronization functions such as mutexes. Unsynchronized count++ from two threads is exactly such a race: load, add and store can interleave.'},
+  sched:{t:'The scheduler',u:'https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap03.html',
+    x:'Which runnable thread executes next is decided by the system, not by your program. Any interleaving of the threads\' steps is possible unless you constrain it with synchronization.'}
+};
+
+// ---- step builders (pure data + small functions; no state in here) ----
+const lock   = (tag,o={}) => ({k:'lock',tag,short:'lock',...o});
+const unlock = (tag,o={}) => ({k:'unlock',tag,short:'unlock',...o});
+const branch = (tag,test,yes,no,say,o={}) => ({k:'branch',tag,short:'test',test,yes,no,say,...o});
+const act    = (tag,short,fn,o={}) => ({k:'act',tag,short,fn,...o});
+const create = (tag,target,o={}) => ({k:'create',tag,short:'create',target,...o});
+const join   = (tag,target,o={}) => ({k:'join',tag,short:'join',target,...o});
+const ret    = (tag,o={}) => ({k:'ret',tag,short:'return',...o});
+const cwait  = (tag,o={}) => ({k:'cwait',tag,short:'wait',...o});
+const signal = (tag,o={}) => ({k:'signal',tag,short:'signal',...o});
+const bcast  = (tag,o={}) => ({k:'bcast',tag,short:'bcast',...o});
+const pr = (tag,fmt) => act(tag,'printf',(S,T)=>{
+  const s = typeof fmt==='function' ? fmt(S.vars,T) : fmt;
+  S.out.push({who:T.id,s}); return `${T.id} prints "${s}".`;
+});
+const incPrint = name => (S,T)=>{
+  S.vars.count++; const s=`Counter value ${name}: ${S.vars.count}`;
+  S.out.push({who:T.id,s});
+  return `${T.id} does count++ (count is now ${S.vars.count}) and prints it. It holds the mutex, so nobody else can touch count meanwhile.`;
+};
+const regSteps = [
+  act('ld','load',(S,T)=>{T.reg=S.vars.count;return `${T.id} copies count (${S.vars.count}) into its private reg. reg = ${T.reg}.`},{doc:'race'}),
+  act('add','add',(S,T)=>{T.reg++;return `${T.id} adds 1 to its private reg: reg = ${T.reg}. The shared count is still ${S.vars.count}!`},{doc:'race'}),
+  act('st','store',(S,T)=>{const o=S.vars.count;S.vars.count=T.reg;return `${T.id} writes reg back: count ${o} → ${T.reg}.`+(o===T.reg?' Nothing changed: an increment was LOST.':'')},{doc:'race'})
+];
+const mainTwo = (extra=[]) => [create('c1','t1'),create('c2','t2'),join('j1','t1'),join('j2','t2'),...extra,ret('mr')];
+
+const f1Prog = [
+  lock('a_lock',{id:'L'}),
+  branch('a_while',V=>V.count>=3&&V.count<=6,'W','IF',
+    (r,V)=>r?`while: count = ${V.count} is inside 3..6 → t1 must wait.`:`while: count = ${V.count} is outside 3..6 → no need to wait.`,{id:'CHK',short:'while',tags:['a_while']}),
+  cwait('a_wait',{id:'W'}),
+  lock('a_wait',{relock:true,go:'CHK'}),
+  branch('a_if',V=>V.count>=10,'EXU','INC',(r,V)=>r?`if: count = ${V.count} ≥ 10 → t1 is done.`:`if: count = ${V.count} < 10 → keep counting.`,{id:'IF',short:'if'}),
+  unlock('a_exu',{id:'EXU'}),
+  ret('a_exr'),
+  act('a_inc','count++',incPrint('functionCount1'),{id:'INC',tags:['a_inc','a_pr']}),
+  unlock('a_ul',{go:'L'})
+];
+const f2Prog = fix => [
+  lock('b_lock',{id:'L'}),
+  branch('b_if',V=>V.count>=10,'BC','INC',(r,V)=>r?`if: count = ${V.count} ≥ 10 → t2 is done.`:`if: count = ${V.count} < 10 → keep counting.`,{short:'if'}),
+  bcast('b_bc',{id:'BC'}),
+  unlock('b_exu'),
+  ret('b_exr'),
+  act('b_inc','count++',incPrint('functionCount2'),{id:'INC',tags:['b_inc','b_pr']}),
+  ...(fix?[
+    branch('b_sigif',V=>V.count>6,'SIG','UL',(r,V)=>r?`count = ${V.count} > 6 → ring the bell.`:`count = ${V.count} ≤ 6 → no signal yet.`,{short:'if'}),
+    signal('b_sig',{id:'SIG'})
+  ]:[]),
+  unlock('b_ul',{id:'UL',go:'L'})
+];
+
+const LEVELS = [
+ { title:'1 · A second path', code:'code-L1', vars:{}, mem:[], regs:false,
+   threads:[{id:'main',fn:'main()'},{id:'t1',fn:'hello()'}],
+   story:`<p>You are <b>main()</b>, the <i>initial thread</i>: when the program starts, yours is the only path.</p>
+<p><code>pthread_create()</code> opens a second path, <b>t1</b>, running <code>hello()</code> in the <i>same</i> process. From then on two paths advance independently and the scheduler decides who moves. At <code>pthread_join()</code> you stop and wait for t1 to reach its end.</p>`,
+   progs:{ main:[pr('m0','main: starting'),create('mc','t1'),pr('m1','main: thread created'),join('mj','t1'),pr('m2','main: thread finished, exiting'),ret('mr')],
+           t1:[pr('hp','Hello from the new thread!'),ret('hr')] },
+   missions:[
+     {id:'done',t:'Run the program to the end (Step or Play).'},
+     {id:'order',t:'Make "Hello from the new thread!" appear BEFORE "main: thread created". Same code, different order: you are the scheduler.',
+      say:'Same program, different output order. After pthread_create() returns, nothing says which path moves first.'},
+     {id:'joinwait',t:'Make main wait inside pthread_join() while t1 is still running.'}
+   ],
+   check(S,F){ if(S.done)F.done=1;
+     const i=S.out.findIndex(o=>o.s.startsWith('Hello')), j=S.out.findIndex(o=>o.s==='main: thread created');
+     if(i>=0&&j<0)F.order=1;
+     if(thr(S,'main').state==='join-wait')F.joinwait=1; }
+ },
+ { title:'2 · Race condition', code:'code-L2', vars:{count:0}, mem:['count'], regs:true,
+   threads:[{id:'main',fn:'main()'},{id:'t1',fn:'worker()'},{id:'t2',fn:'worker()'}],
+   story:`<p>You create <b>two</b> threads running the <i>same</i> function. Same code, but two separate paths: each has its own program counter and its own <code>reg</code> (a local variable lives on each thread's own stack).</p>
+<p><code>count</code> is a global, so there is only one, shared by both. <code>count++</code> looks like one step but is really load → add → store. Expected result: 2.</p>`,
+   progs:{ main:mainTwo([pr('pr',V=>`count = ${V.count} (expected 2)`)]), t1:[...regSteps,ret('ret')], t2:[...regSteps,ret('ret')] },
+   missions:[
+     {id:'two',t:'Finish a run that prints count = 2.'},
+     {id:'lost',t:'Now break it: finish a run that prints count = 1. (Hint: let both threads load before either stores.)',
+      say:'Lost update! Both threads read 0, both computed 1, both stored 1. This is a data race. Real programs do this millions of times per second, so it does happen.'}
+   ],
+   check(S,F){ if(S.done&&S.vars.count===2)F.two=1; if(S.done&&S.vars.count===1)F.lost=1; }
+ },
+ { title:'3 · Mutex', code:'code-L3', vars:{count:0}, mem:['count','mutex'], regs:true,
+   threads:[{id:'main',fn:'main()'},{id:'t1',fn:'worker()'},{id:'t2',fn:'worker()'}],
+   story:`<p>Same two workers, but the load/add/store is now a <b>critical section</b> guarded by a mutex: a gate only one thread may hold at a time.</p>
+<p>Watch closely: the scheduler can still pause a thread <i>inside</i> the critical section. The mutex doesn't stop that; it stops the <i>other</i> thread from getting in.</p>`,
+   progs:{ main:mainTwo([pr('pr',V=>`count = ${V.count} (expected 2)`)]),
+     t1:[lock('lk'),...regSteps,unlock('ul'),ret('ret')], t2:[lock('lk'),...regSteps,unlock('ul'),ret('ret')] },
+   missions:[
+     {id:'blocked',t:'Make a thread hit the locked gate (blocked on the mutex).',
+      say:'Blocked! The thread cannot run at all until the owner calls pthread_mutex_unlock().'},
+     {id:'preempt',t:'Run another thread while one is holding the mutex. The owner is paused mid-section, and it\'s still safe.'},
+     {id:'safe',t:'Finish a run. Try to get count = 1. You can\'t anymore.'}
+   ],
+   check(S,F,c){ if(S.threads.some(t=>t.state==='blocked-mutex'))F.blocked=1;
+     if(c&&c.ownerBefore&&c.ownerBefore!==c.T.id)F.preempt=1;
+     if(S.done)F.safe=1; }
+ },
+ { title:'4 · Your program', code:'code-L4', vars:{count:0}, mem:['count','mutex','cond'], regs:false,
+   threads:[{id:'main',fn:'main()'},{id:'t1',fn:'functionCount1()'},{id:'t2',fn:'functionCount2()'}],
+   story:`<p>Your code, exactly as written. Both threads count to 10 under the mutex, but <b>t1</b> must not count while <code>count</code> is in 3..6. Then it sleeps on the condition variable (the <i>waiting room</i>) until someone rings the bell.</p>
+<p>Question: who rings the bell, and when? Watch t2's code carefully.</p>`,
+   progs:{ main:mainTwo(), t1:f1Prog, t2:f2Prog(false) },
+   missions:[
+     {id:'asleep',t:'Make t1 fall asleep in pthread_cond_wait(). Hint: right after count becomes 3, run t1.',
+      say:'t1 is in the waiting room. Note that pthread_cond_wait() also UNLOCKED the mutex, otherwise t2 could never change count.'},
+     {id:'oversleep',t:'Keep counting with t2 until count ≥ 7 while t1 still sleeps.',
+      say:'BUG: count is outside 3..6, yet t1 is still asleep. t2 never calls pthread_cond_signal() while counting; the only wake-up is the broadcast at count 10. Your terminal runs never showed this because t1 happened to never enter the wait. Level 5 fixes it.'},
+     {id:'spurious',t:'While t1 sleeps, click "spurious wake-up" in the condition-variable box. Watch the while loop.',
+      say:'POSIX allows spurious wake-ups. Because the code uses while (not if), t1 re-checks count and goes back to sleep if it still must wait.'}
+   ],
+   check(S,F){ const t1=thr(S,'t1');
+     if(t1.state==='cond-wait')F.asleep=1;
+     if(t1.state==='cond-wait'&&S.vars.count>=7)F.oversleep=1;
+     if(S.ev.spurious)F.spurious=1; }
+ },
+ { title:'5 · The fix', code:'code-L5', vars:{count:0}, mem:['count','mutex','cond'], regs:false,
+   threads:[{id:'main',fn:'main()'},{id:'t1',fn:'functionCount1()'},{id:'t2',fn:'functionCount2()'}],
+   story:`<p>Fixed version: after each increment t2 checks <code>count &gt; COUNT_HALT2</code> and calls <code>pthread_cond_signal()</code>. The thread that <i>changes</i> the condition is the one that rings the bell.</p>
+<p>Signals at 8, 9, 10 usually find nobody waiting. They are simply lost, and that's harmless here.</p>`,
+   progs:{ main:mainTwo(), t1:f1Prog, t2:f2Prog(true) },
+   missions:[
+     {id:'asleep',t:'Make t1 fall asleep in pthread_cond_wait().'},
+     {id:'rescued',t:'See t2\'s pthread_cond_signal() wake t1 as soon as count reaches 7.',
+      say:'Rescued at 7! The waker changes the shared state under the mutex, then signals. The sleeper wakes, re-locks, re-checks the while condition and continues.'},
+     {id:'lostsig',t:'See a signal that nobody hears (no thread waiting).',
+      say:'No waiter → no effect. A condition variable is not a counter or a flag; it remembers nothing. That\'s why the real state lives in count, protected by the mutex.'}
+   ],
+   check(S,F){ if(thr(S,'t1').state==='cond-wait')F.asleep=1; if(S.ev.signalWoke)F.rescued=1; if(S.ev.signalLost)F.lostsig=1; }
+ }
+];
+
+function parseCode(id){
+  const raw = document.getElementById(id).textContent.replace(/^\s*\n/,'').replace(/\s+$/,'');
+  const lines=[], tags={};
+  raw.split('\n').forEach((ln,i)=>{
+    const m = ln.match(/@@(\w+)\s*$/);
+    if(m){ tags[m[1]]=i; ln=ln.slice(0,m.index).replace(/\s+$/,''); }
+    lines.push(ln);
+  });
+  return {lines,tags};
+}
+function buildLevel(i){
+  const L = LEVELS[i];
+  if(!L.built){
+    Object.assign(L, parseCode(L.code));
+    L.labels={};
+    for(const id in L.progs){
+      L.labels[id]={};
+      L.progs[id].forEach((st,j)=>{ if(st.id) L.labels[id][st.id]=j;
+        (st.tags||[st.tag]).forEach(t=>{ if(!(t in L.tags)) console.warn('missing tag',t); }); });
+    }
+    L.built=true;
+  }
+  return L;
+}
+const thr = (S,id) => S.threads.find(t=>t.id===id);
+function initState(L,seed){
+  return { seed, rng:seed|0, step:0, done:false, vars:{...L.vars}, mutex:{owner:null,queue:[]}, cond:[], out:[],
+    log:[{n:0,who:'main',text:'The process starts with one thread: main(). That\'s you. Click Step, or click ▶ run on a lane.',doc:'thread'}],
+    gantt:[], threads:L.threads.map((t,i)=>({id:t.id,fn:t.fn,pc:0,state:i===0?'ready':'unborn',reg:null,wait:null})),
+    last:'main', lastTags:null, lastWho:null, ev:{} };
+}
+function rnd(S){ let t=S.rng=(S.rng+0x6D2B79F5)|0; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }
+const runnable = S => S.done ? [] : S.threads.filter(t=>t.state==='ready').map(t=>t.id);
+function pickAuto(S,chaos){
+  const R=runnable(S); if(!R.length) return null;
+  if(R.includes(S.last) && rnd(S)>=chaos) return S.last;
+  return R[Math.floor(rnd(S)*R.length)];
+}
+function releaseMutex(S){
+  S.mutex.owner=null; const w=S.mutex.queue.slice(); S.mutex.queue=[];
+  w.forEach(id=>thr(S,id).state='ready'); return w;
+}
+function exec(S,L,T){
+  const st=L.progs[T.id][T.pc], lab=L.labels[T.id];
+  const next=()=>{ T.pc = st.go!=null ? lab[st.go] : T.pc+1; };
+  const r={text:'',doc:st.doc||null,cell:st.short,bad:false,born:null};
+  switch(st.k){
+    case 'lock':
+      r.doc = st.relock?'cwait':'lock';
+      if(st.relock) r.cell='relock';
+      if(S.mutex.owner===null){
+        S.mutex.owner=T.id;
+        r.text = st.relock ? `${T.id} has been woken. Before pthread_cond_wait() returns, it re-locks the mutex. Then it goes back to the while check.`
+                           : `${T.id} locks the mutex. Until it unlocks, nobody else can get past this gate.`;
+        next();
+      } else {
+        T.state='blocked-mutex'; if(!S.mutex.queue.includes(T.id)) S.mutex.queue.push(T.id);
+        r.text=`${T.id} tries to lock, but ${S.mutex.owner} holds the mutex → ${T.id} is BLOCKED until it's unlocked.`;
+        r.cell='lock ✗'; r.bad=true;
+      }
+      break;
+    case 'unlock': { const w=releaseMutex(S);
+      r.text=`${T.id} unlocks the mutex.`+(w.length?` ${w.join(', ')} was blocked on it and is runnable again (it will retry the lock).`:'');
+      r.doc='unlock'; next(); break; }
+    case 'branch': { const ok=!!st.test(S.vars); T.pc=lab[ok?st.yes:st.no]; r.text=st.say(ok,S.vars,T); break; }
+    case 'act': r.text=st.fn(S,T); next(); break;
+    case 'create': { const N=thr(S,st.target); N.state='ready'; r.born=N.id; r.doc='create';
+      r.text=`${T.id} calls pthread_create() → a new path appears: ${N.id} will run ${N.fn} in the same process, sharing its memory. pthread_create() returns 0 and ${T.id} simply continues.`;
+      next(); break; }
+    case 'join': { const N=thr(S,st.target); r.doc='join';
+      if(N.state==='done'){
+        if(T.resumed===N.id){ T.resumed=null; r.cell='↩ join';
+          r.text=`${T.id} wakes up and its ONE pthread_join(${N.id}) call finally returns, because ${N.id} has terminated. (Same call as before, not a second one.)`; }
+        else r.text=`${N.id} has already finished, so pthread_join(${N.id}) returns immediately.`;
+        next(); }
+      else { T.state='join-wait'; T.wait=N.id; r.cell='join…'; r.text=`${T.id} calls pthread_join(${N.id}). ${N.id} is still running, so ${T.id} is suspended INSIDE this call until ${N.id} finishes.`; }
+      break; }
+    case 'ret':
+      T.state='done';
+      if(T.id==='main'){ S.done=true; r.doc='exitmain';
+        S.threads.forEach(t=>{ if(t.state!=='done') t.state='done'; });
+        r.text='main returns → as if exit() was called: the whole process ends. Every path stops here.'; }
+      else { r.doc='create';
+        const w=S.threads.filter(t=>t.state==='join-wait'&&t.wait===T.id); w.forEach(t=>{t.state='ready';t.wait=null;t.resumed=T.id;});
+        r.text=`${T.id} returns from ${T.fn} → its path ends (as if pthread_exit() was called).`+(w.length?` ${w.map(t=>t.id).join(', ')} was waiting in pthread_join and is runnable again.`:''); }
+      break;
+    case 'cwait': { const w=releaseMutex(S); T.state='cond-wait'; S.cond.push(T.id); r.doc='cwait';
+      r.text=`${T.id} calls pthread_cond_wait(): in one atomic move it UNLOCKS the mutex and goes to sleep in the waiting room. It cannot run until someone signals.`+(w.length?` (${w.join(', ')} can now get the mutex.)`:'');
+      next(); break; }
+    case 'signal': r.doc='signal';
+      if(S.cond.length){ const id=S.cond.shift(); thr(S,id).state='ready'; S.ev.signalWoke=id;
+        r.text=`${T.id} calls pthread_cond_signal() → ${id} wakes up. It still has to re-lock the mutex, which ${T.id} holds right now.`; }
+      else { S.ev.signalLost=1; r.bad=false;
+        r.text=`${T.id} calls pthread_cond_signal(), but nobody is waiting → no effect. The signal is lost, not saved for later.`; }
+      next(); break;
+    case 'bcast': r.doc='signal';
+      if(S.cond.length){ const w=S.cond.splice(0); w.forEach(id=>thr(S,id).state='ready');
+        r.text=`${T.id} calls pthread_cond_broadcast() → wakes everyone in the waiting room: ${w.join(', ')}.`; }
+      else r.text=`${T.id} calls pthread_cond_broadcast(), but nobody is waiting → no effect.`;
+      next(); break;
+  }
+  return r;
+}
+function snapshotStates(S){ const o={}; S.threads.forEach(t=>o[t.id]=t.state); return o; }
+function engineStep(S,L,tid){
+  const T=thr(S,tid); S.ev={};
+  const ownerBefore=S.mutex.owner, st=L.progs[T.id][T.pc];
+  const r=exec(S,L,T);
+  S.step++; S.last=tid; S.lastWho=tid; S.lastTags=st.tags||[st.tag];
+  S.gantt.push({who:tid,cell:r.cell,bad:r.bad,born:r.born,st:snapshotStates(S)});
+  S.log.push({n:S.step,who:tid,text:r.text,doc:r.doc}); if(S.log.length>80)S.log.shift();
+  const F={}; L.check(S,F,{T,ownerBefore,st});
+  if(!S.done && !runnable(S).length) S.log.push({n:S.step,who:null,text:'No thread can run: DEADLOCK.',cls:'alert'});
+  return F;
+}
+function spurious(S,L){
+  S.ev={spurious:1}; const w=S.cond.splice(0); w.forEach(id=>thr(S,id).state='ready');
+  S.step++; S.lastWho=null; S.lastTags=null;
+  S.gantt.push({who:null,cell:'',st:snapshotStates(S),spur:w});
+  S.log.push({n:S.step,who:w[0],text:`Spurious wake-up: ${w.join(', ')} wakes although nobody signalled. POSIX allows this. Its next step re-locks the mutex and re-checks the while condition.`,doc:'cwait'});
+  const F={}; L.check(S,F,null); return F;
+}
+
+/* ============================== UI ============================== */
+if (typeof window !== 'undefined') (function(){
+  const $=s=>document.querySelector(s);
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const COLOR={main:'var(--main)',t1:'var(--t1)',t2:'var(--t2)'};
+  const STATE={ready:'runnable','blocked-mutex':'blocked on mutex','cond-wait':'asleep on cond','join-wait':'in pthread_join',done:'finished',unborn:'not created yet'};
+  let li=0, L, S, hist=[], timer=null, prevCount=null, shownDoc=null;
+  const won = LEVELS.map(()=>({}));
+  let seed = (Math.random()*1e9)|0;
+
+  function hl(line){
+    return esc(line).replace(/(\/\*.*?\*\/|"(?:[^"\\]|\\.)*"|#\w+|\b(?:int|void|return|for|while|if|NULL|pthread_t|pthread_mutex_t|pthread_cond_t)\b|\bpthread_\w+|\bPTHREAD_\w+|\bprintf\b)/g, m=>{
+      if(m.startsWith('/*'))return `<span class="c">${m}</span>`;
+      if(m.startsWith('"'))return `<span class="s">${m}</span>`;
+      if(/^(pthread_(?!t\b|mutex_t\b|cond_t\b)|PTHREAD_|printf)/.test(m))return `<span class="f">${m}</span>`;
+      return `<span class="k">${m}</span>`;
+    });
+  }
+  function loadLevel(i,newSeed){
+    stop(); li=i; L=buildLevel(i);
+    if(newSeed) seed=(Math.random()*1e9)|0;
+    S=initState(L,seed); hist=[]; prevCount=null; shownDoc=null;
+    $('#code').innerHTML=L.lines.map((ln,k)=>`<div class="ln" data-i="${k}"><span class="gut"></span><span class="no">${k+1}</span><span class="src">${hl(ln)||' '}</span></div>`).join('');
+    $('#lvlTitle').textContent='Level '+L.title;
+    $('#story').innerHTML=L.story;
+    render();
+  }
+  function tabs(){
+    $('#tabs').innerHTML=LEVELS.map((l,i)=>{
+      const all=l.missions.every(m=>won[i][m.id]);
+      return `<button data-i="${i}" class="${i===li?'on':''}">${esc(l.title)}${all?'<span class="star">✓</span>':''}</button>`;}).join('');
+  }
+  function step(tid){
+    if(S.done) { stop(); return; }
+    if(tid==null) tid=pickAuto(S, +$('#chaos').value/100);
+    if(!tid || thr(S,tid).state!=='ready') return;
+    hist.push(JSON.stringify(S));
+    award(engineStep(S,L,tid));
+    render();
+    if(S.done) stop();
+  }
+  function award(F){
+    for(const id in F){ if(won[li][id]) continue; won[li][id]=1;
+      const m=L.missions.find(x=>x.id===id);
+      if(m) S.log.push({n:S.step,who:null,cls:'win',text:'★ Mission complete: '+m.t+(m.say?' — '+m.say:'')});
+    }
+  }
+  function back(){ stop(); if(hist.length){ S=JSON.parse(hist.pop()); prevCount=S.vars.count; render(); } }
+  function play(){ if(timer){stop();return;} if(S.done) return;
+    $('#bPlay').textContent='❚❚ Pause';
+    const tick=()=>{ step(); if(timer) timer=setTimeout(tick, 1100-(+$('#speed').value)*100); };
+    timer=setTimeout(tick,50); }
+  function stop(){ if(timer){clearTimeout(timer);} timer=null; $('#bPlay').textContent='▶▶ Play'; }
+
+  function render(){
+    tabs();
+    // missions
+    $('#missions').innerHTML=L.missions.map(m=>`<li class="${won[li][m.id]?'won':''}">${esc(m.t)}</li>`).join('');
+    // code markers
+    document.querySelectorAll('#code .ln').forEach(d=>{d.classList.remove('last');d.style.borderLeftColor='transparent';d.querySelector('.gut').innerHTML='';});
+    if(S.lastTags){ S.lastTags.forEach(t=>{ const d=$(`#code .ln[data-i="${L.tags[t]}"]`); if(d){d.classList.add('last'); d.style.borderLeftColor=COLOR[S.lastWho];} }); }
+    S.threads.forEach(t=>{
+      if(t.state==='done'||t.state==='unborn') return;
+      const st=L.progs[t.id][t.pc]; const k=L.tags[(st.tags||[st.tag])[0]];
+      const d=$(`#code .ln[data-i="${k}"] .gut`); if(d) d.insertAdjacentHTML('beforeend',`<i class="dot" title="${t.id} is here" style="background:${COLOR[t.id]}"></i>`);
+    });
+    const lastLine=S.lastTags&&$(`#code .ln[data-i="${L.tags[S.lastTags[0]]}"]`);
+    if(lastLine){ const c=$('#code'); const top=lastLine.offsetTop-c.offsetTop; if(top<c.scrollTop+20||top>c.scrollTop+c.clientHeight-40) c.scrollTop=top-c.clientHeight/2; }
+    // memory
+    let mem='';
+    if(L.mem.includes('count')){
+      mem+=`<div class="box"><div class="ttl">int count <span class="muted">(global)</span></div><div class="big" id="cnt">${S.vars.count}</div></div>`;
+    }
+    if(L.mem.includes('mutex')){
+      const o=S.mutex.owner;
+      mem+=`<div class="box"><div class="ttl">pthread_mutex_t <span class="muted">(the gate)</span></div>
+        <div>${o?`🔒 held by <span class="chip" style="background:${COLOR[o]}">${o}</span>`:'🔓 <b>free</b>'}</div>
+        <div class="muted">blocked: ${S.mutex.queue.length?S.mutex.queue.map(q=>`<span class="chip" style="background:${COLOR[q]}">${q}</span>`).join(''):'nobody'}</div></div>`;
+    }
+    if(L.mem.includes('cond')){
+      mem+=`<div class="box"><div class="ttl">pthread_cond_t <span class="muted">(waiting room)</span></div>
+        <div>${S.cond.length?S.cond.map(q=>`<span class="chip" style="background:${COLOR[q]}">💤 ${q}</span>`).join(''):'<span class="muted">empty</span>'}</div>
+        <button class="btn sm" id="bSpur" ${S.cond.length&&!S.done?'':'disabled'} title="Wake sleepers without any signal (POSIX allows this)">spurious wake-up</button></div>`;
+    }
+    if(!mem) mem='<div class="muted">This level has no shared variables yet. Just paths. (stdout is shared too, by the way.)</div>';
+    $('#mem').innerHTML=mem;
+    if(L.mem.includes('count')&&prevCount!==null&&prevCount!==S.vars.count){ const c=$('#cnt'); c.classList.remove('pulse'); void c.offsetWidth; c.classList.add('pulse'); }
+    prevCount=L.mem.includes('count')?S.vars.count:null;
+    const sp=$('#bSpur'); if(sp) sp.onclick=()=>{ stop(); hist.push(JSON.stringify(S)); award(spurious(S,L)); render(); };
+    // lane heads
+    $('#heads').innerHTML=S.threads.map(t=>{
+      const can=t.state==='ready'&&!S.done;
+      return `<div class="lh" style="--tc:${COLOR[t.id]}">
+        <div class="nm"><i class="dot" style="background:${COLOR[t.id]}"></i>${t.id==='main'?'main (you)':t.id}
+          <button class="btn sm" data-run="${t.id}" ${can?'':'disabled'}>▶ run</button></div>
+        <div class="fnm">${esc(t.fn)}</div>
+        <div class="ln2"><span class="badge b-${t.state}">${STATE[t.state]}</span>${L.regs&&t.id!=='main'?`<span class="muted">reg = ${t.reg==null?'?':t.reg}</span>`:''}</div></div>`;
+    }).join('');
+    // rows (gantt)
+    $('#rows').innerHTML=S.threads.map(t=>{
+      let h='', alive=false;
+      S.gantt.forEach((g,ci)=>{
+        const s=g.st[t.id];
+        if(g.born===t.id) alive=true;
+        let cls='cell', inner='';
+        if(g.who===t.id){ cls+=' ran'+(g.bad?' bad':'')+(s!=='done'?' path':''); inner=`<div class="blk" title="step ${ci+1}: ${esc(g.cell)}">${esc(g.cell)}</div>`; }
+        else if(g.born===t.id){ cls+=' born path'; inner='<div class="blk" title="created">new</div>'; }
+        else if(g.spur&&g.spur.includes(t.id)){ cls+=' ran path'; inner='<div class="blk" title="spurious wake-up" style="background:var(--wait)">wake?</div>'; }
+        else if(s==='ready') cls+=' path';
+        else if(s==='blocked-mutex'||s==='cond-wait'||s==='join-wait') cls+=' '+s;
+        h+=`<div class="${cls}">${inner}</div>`;
+      });
+      if(t.state!=='done'&&t.state!=='unborn') h+=`<div class="cell cur ${t.state==='ready'?'path':t.state}"></div>`;
+      return `<div class="row" style="--tc:${COLOR[t.id]}">${h}</div>`;
+    }).join('');
+    const sc=$('#scroll'); sc.scrollLeft=sc.scrollWidth;
+    // stdout
+    $('#term').innerHTML=`<span class="p">$ ./a</span>\n`.replace('\n','<br>')+S.out.map(o=>`<span style="color:${COLOR[o.who]}">${esc(o.s)}</span>`).join('<br>');
+    $('#term').scrollTop=1e9;
+    // log
+    $('#log').innerHTML=S.log.slice().reverse().map((e,i)=>`<div class="e ${e.cls||''}" data-doc="${e.doc||''}" style="--tc:${e.who?COLOR[e.who]:'var(--line)'}"><span class="n">#${e.n}</span>${esc(e.text)}</div>`).join('');
+    const lastDoc=[...S.log].reverse().find(e=>e.doc); showRule(lastDoc?lastDoc.doc:'thread');
+    // banner
+    const b=$('#banner');
+    if(S.done){ b.style.display='block'; b.textContent=`Process exited after ${S.step} steps. Try Reset with a new scheduler, or be the scheduler yourself, to get a different run.`; }
+    else b.style.display='none';
+    $('#bBack').disabled=!hist.length; $('#bStep').disabled=S.done; $('#bPlay').disabled=S.done&&!timer;
+    $('#seed').textContent='scheduler seed '+S.seed;
+  }
+  function showRule(k){ const d=DOCS[k]||DOCS.thread;
+    $('#rule').innerHTML=`<b>${esc(d.t)}</b>${esc(d.x)}<br><a href="${d.u}" target="_blank" rel="noopener">Read the POSIX.1-2024 page ↗</a>`; }
+
+  $('#tabs').onclick=e=>{ const b=e.target.closest('button'); if(b) loadLevel(+b.dataset.i,false); };
+  $('#heads').onclick=e=>{ const b=e.target.closest('[data-run]'); if(b){ stop(); step(b.dataset.run); } };
+  $('#log').onclick=e=>{ const d=e.target.closest('.e'); if(d&&d.dataset.doc) showRule(d.dataset.doc); };
+  $('#bReset').onclick=()=>loadLevel(li,false);
+  $('#bShuffle').onclick=()=>loadLevel(li,true);
+  $('#bBack').onclick=back;
+  $('#bStep').onclick=()=>{stop();step();};
+  $('#bPlay').onclick=play;
+  $('#chaos').oninput=e=>$('#chaosV').textContent=e.target.value+'%';
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT') return;
+    if(e.key===' '||e.key==='ArrowRight'){e.preventDefault();stop();step();}
+    else if(e.key==='ArrowLeft'){e.preventDefault();back();}
+    else if(e.key==='p'||e.key==='P'){play();}
+  });
+  loadLevel(0,false);
+})();
+</script>
+</body>
+</html>

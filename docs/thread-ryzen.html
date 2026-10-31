@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ryzen Thread Lab</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--ink:#1b1f24;--mute:#5f6873;--faint:#8a919a;--line:#dde1e6;--grid:#eceef1;--code:#fbfbfc;--hl:#fff3c4;
+  --main:#3b4250;--t1:#2a78d6;--t2:#eb6834;--t3:#1baf7a;--t4:#eda100;
+  --accent:#6250d6;--good:#1f9d55;--bad:#d64545;--warn:#b7791f;
+  --kw:#a626a4;--fn:#0b7a75;--str:#50a14f;--cm:#8a919a;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--faint:#7d858f;--line:#2d3238;--grid:#23272c;--code:#15181b;--hl:#3b3420;
+  --main:#c3c8d0;--t1:#3987e5;--t2:#d95926;--t3:#199e70;--t4:#c98500;
+  --accent:#9085e9;--good:#4cc38a;--bad:#ff6b6b;--warn:#e0a63a;
+  --kw:#d38cf0;--fn:#4fd1c5;--str:#9bd47f;--cm:#7d858f;
+}}
+:root[data-theme="dark"]{
+  --bg:#111316;--panel:#1a1d21;--ink:#e6e8eb;--mute:#9aa3ad;--faint:#7d858f;--line:#2d3238;--grid:#23272c;--code:#15181b;--hl:#3b3420;
+  --main:#c3c8d0;--t1:#3987e5;--t2:#d95926;--t3:#199e70;--t4:#c98500;
+  --accent:#9085e9;--good:#4cc38a;--bad:#ff6b6b;--warn:#e0a63a;
+  --kw:#d38cf0;--fn:#4fd1c5;--str:#9bd47f;--cm:#7d858f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 2px}
+h2{font-size:16px;margin:0 0 6px}
+h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:14px 0 6px}
+p{margin:0 0 8px}
+code{font-family:Consolas,"Cascadia Mono",monospace;font-size:.92em}
+a{color:var(--t1)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:14px}
+.muted{color:var(--mute)} .small{font-size:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
+.cmd{display:flex;align-items:center;gap:8px;background:#0d1117;color:#d2d8de;border-radius:8px;padding:8px 10px;font:13px Consolas,monospace;margin:6px 0;overflow-x:auto}
+.cmd span{flex:1;white-space:pre}
+.cmd .btn{background:#21262d;color:#d2d8de;border-color:#30363d;font-size:12px;padding:2px 8px}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 9px;font-size:12px;margin:2px 4px 2px 0}
+.banner{border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px}
+.banner.sample{border:1px solid var(--warn);color:var(--warn)}
+.banner.real{border:1px solid var(--good);color:var(--good)}
+.banner.err{border:1px solid var(--bad);color:var(--bad)}
+textarea{width:100%;min-height:70px;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:8px;font:12px Consolas,monospace;padding:8px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.may,.maynot{border-radius:8px;padding:8px 12px;border:1px solid var(--line)}
+.may{border-left:4px solid var(--good)} .maynot{border-left:4px solid var(--bad)}
+.may>b,.maynot>b{display:block;margin-bottom:2px}
+.may ul,.maynot ul{margin:0;padding-left:18px}
+/* code viewer */
+.code{background:var(--code);border:1px solid var(--line);border-radius:8px;font:12.5px/1.5 Consolas,"Cascadia Mono",monospace;max-height:460px;overflow:auto;padding:6px 0}
+.ln{display:flex;white-space:pre}
+.ln .no{width:38px;flex:none;text-align:right;color:var(--cm);padding-right:12px;user-select:none}
+.ln.mark{background:var(--hl)}
+.k{color:var(--kw)}.f{color:var(--fn)}.s{color:var(--str)}.c{color:var(--cm);font-style:italic}
+details>summary{cursor:pointer;color:var(--mute);margin:6px 0}
+/* timeline */
+.tl{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;user-select:none}
+.tlrow{display:grid;grid-template-columns:150px 1fr;border-bottom:1px solid var(--line);height:46px}
+.tlrow:last-child{border-bottom:none}
+.tlrow.axis{height:28px;background:var(--panel)}
+.tlname{padding:4px 8px;border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;font-size:13px}
+.tlname b{display:flex;align-items:center;gap:6px}
+.tlname i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.tlname span{font-size:11px;color:var(--mute)}
+.track{position:relative;overflow:hidden}
+.gridline{position:absolute;top:0;bottom:0;width:1px;background:var(--grid)}
+.tick{position:absolute;top:6px;font-size:11px;color:var(--mute);transform:translateX(-50%);white-space:nowrap}
+.seg{position:absolute;top:10px;height:26px;border-radius:4px;background:var(--tc);color:#fff;font:600 11px/26px Consolas,monospace;padding:0 4px;overflow:hidden;white-space:nowrap;min-width:2px;box-shadow:0 0 0 1px var(--panel)}
+.joinw{position:absolute;top:22px;height:0;border-top:3px dotted var(--mute)}
+.mk{position:absolute;top:6px;bottom:6px;width:2px;background:var(--tc)}
+.mk.create{background:var(--main)}
+.mk.start{background:var(--ink);width:2px}
+.mk.start::after{content:"";position:absolute;top:-1px;left:-4px;border:5px solid transparent;border-top-color:var(--ink)}
+.cursor{position:absolute;top:0;bottom:0;width:1px;background:var(--accent);pointer-events:none;display:none}
+.readout{min-height:22px;font-size:13px;margin-top:6px}
+.tip{position:fixed;z-index:20;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.15);display:none;max-width:320px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:10px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat .v{font:600 24px/1.1 Consolas,monospace}
+.stat .l{font-size:12px;color:var(--mute)}
+/* race bars */
+.bars{display:grid;grid-template-columns:150px 1fr 120px;gap:4px 10px;align-items:center}
+.bars .lab{font-size:12px;color:var(--mute);text-align:right}
+.bars .val{font:12px Consolas,monospace}
+.bt{position:relative;height:18px;background:var(--grid);border-radius:4px}
+.bt .fill{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:var(--t1)}
+.bt .exp{position:absolute;top:-3px;bottom:-3px;right:0;width:2px;background:var(--ink)}
+.bars .grp{grid-column:1/-1;font-weight:600;margin-top:8px}
+/* SB */
+.sbgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.sbcard{border:1px solid var(--line);border-radius:8px;padding:10px}
+.sbcard table{border-collapse:collapse;width:100%;font-size:13px}
+.sbcard td,.sbcard th{border:1px solid var(--line);padding:5px 6px;text-align:center}
+.sbcard th{font-weight:600;color:var(--mute);font-size:12px}
+.sbcard td.imp{outline:2px solid var(--bad);outline-offset:-2px;font-weight:700}
+.sbcard td.imp.zero{outline-color:var(--good)}
+.verdict{margin-top:6px;font-size:13px}
+.machine{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0}
+.core,.memory{border:1px solid var(--line);border-radius:8px;padding:8px;min-height:120px}
+.core h4,.memory h4{margin:0 0 6px;font-size:13px}
+.slot{font:13px Consolas,monospace;border:1px dashed var(--line);border-radius:6px;padding:4px 6px;margin:4px 0;min-height:28px}
+.slot.hot{background:var(--hl)}
+.prog{font:12.5px Consolas,monospace}
+.prog div{padding:1px 4px;border-left:3px solid transparent}
+.prog div.done{color:var(--mute);text-decoration:line-through}
+.prog div.now{border-left-color:var(--accent);background:var(--hl)}
+.step-text{min-height:44px}
+@media (max-width:860px){.cols,.machine{grid-template-columns:1fr}.tlrow{grid-template-columns:96px 1fr}.bars{grid-template-columns:90px 1fr 90px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ryzen Thread Lab</h1>
+  <p class="muted">Real threads on real cores. You run the C program on your machine; this page draws what your CPU actually did.</p>
+
+  <div class="panel">
+    <h2>What we're testing</h2>
+    <p>The previous page drew threads <b>one step at a time</b>. Your Ryzen 9 5950X has 16 cores and 32 hardware threads, so here several steps really happen <b>at the same instant</b>. Three questions:</p>
+    <ol style="margin:0 0 6px;padding-left:20px">
+      <li><b>Where and when do threads actually run?</b> Do they run in parallel? What changes on a single CPU?</li>
+      <li><b>Does the race from level 2 really happen?</b> Does a mutex really fix it? Is one CPU enough to cause it?</li>
+      <li><b>Is "one step at a time" always a valid picture?</b> We'll catch a result that no step-by-step order can produce.</li>
+    </ol>
+  </div>
+
+  <!-- ===== BUILD ===== -->
+  <div class="panel">
+    <h2>Step 1 · Build and run on Cygwin</h2>
+    <p>Save the source, then in the Cygwin terminal, in the same folder:</p>
+    <div class="row"><button class="btn pri" id="dl">⬇ Download ryzen_lab.c</button><button class="btn" id="copySrc">Copy source</button></div>
+    <div class="cmd"><span>gcc -std=gnu90 -O2 -Wall -Wextra -pedantic -pthread ryzen_lab.c -o lab</span><button class="btn" data-copy>copy</button></div>
+    <div class="cmd"><span>./lab > out.txt</span><button class="btn" data-copy>copy</button></div>
+    <p class="small muted">It takes roughly 10 s to a minute and should compile with no warnings. <code>-O2</code> matters: the racy code uses <code>volatile</code> so the compiler keeps every load and store we wrote. Optional arguments: <code>./lab RACE_N SB_ITERATIONS</code> (defaults 2000000 and 1000000).</p>
+    <details>
+      <summary>Show the source (C90 + GNU extensions, ~330 lines)</summary>
+      <div class="code" id="code"></div>
+    </details>
+  </div>
+
+  <!-- ===== LOAD ===== -->
+  <div class="panel">
+    <h2>Step 2 · Load your results</h2>
+    <div class="row">
+      <label class="btn pri">📂 Open out.txt<input type="file" id="file" accept=".txt,text/plain" hidden></label>
+      <button class="btn" id="useSample">Show sample data</button>
+      <span class="muted small">…or paste the output below:</span>
+    </div>
+    <textarea id="paste" placeholder="Paste the contents of out.txt here"></textarea>
+    <div class="row" style="margin-top:6px"><button class="btn" id="loadPaste">Load pasted text</button><span id="info"></span></div>
+    <div id="srcBanner" class="banner sample"></div>
+  </div>
+
+  <!-- ===== EXP 1 ===== -->
+  <div class="panel" id="exp1">
+    <h2>Experiment 1 · Where and when do threads actually run?</h2>
+    <p><code>main</code> creates 4 workers. Each worker runs for a fixed time window, and in a tight loop it keeps asking <code>sched_getcpu()</code> (which CPU am I on?) and the clock. A coloured bar is a stretch where the thread was <b>really executing</b>. The number on the bar is the logical CPU. An empty gap means the scheduler had taken the thread off the CPU.</p>
+    <div class="row" style="margin-bottom:8px">
+      <span class="small muted">Scenario:</span>
+      <button class="btn on" data-scn="free">All CPUs</button>
+      <button class="btn" data-scn="pin1">Pinned to ONE CPU</button>
+      <span class="small muted" style="margin-left:12px">View:</span>
+      <button class="btn on" data-zoom="all">Whole window</button>
+      <button class="btn" data-zoom="birth">Zoom: thread creation</button>
+    </div>
+    <div class="stats" id="tlStats"></div>
+    <div class="tl" id="tl"></div>
+    <div class="readout" id="readout"><span class="muted">Move the mouse over the lanes. The purple line counts how many threads are running at that exact instant.</span></div>
+    <p class="small muted">Legend: <span class="badge">▼ black marker = the thread's first instruction</span><span class="badge">grey ticks on main = the pthread_create() call</span><span class="badge">dotted line on main = waiting inside pthread_join()</span></p>
+    <div id="tlStory"></div>
+  </div>
+
+  <!-- ===== EXP 2 ===== -->
+  <div class="panel" id="exp2">
+    <h2>Experiment 2 · The race from level 2, for real</h2>
+    <p>Two threads each run <code>count++</code> N times, so the expected total is 2N. Without a mutex, <code>count++</code> compiles to three separate instructions:</p>
+    <div class="cmd"><span>movq  g_count(%rip), %rax   ; load
+addq  $1, %rax              ; add   (in a private register)
+movq  %rax, g_count(%rip)   ; store</span></div>
+    <p>Each bar is one run. The black line on the right is the expected total. Hover a bar for the exact numbers.</p>
+    <div class="bars" id="bars"></div>
+    <div id="raceStory" style="margin-top:12px"></div>
+  </div>
+
+  <!-- ===== EXP 3 ===== -->
+  <div class="panel" id="exp3">
+    <h2>Experiment 3 · A result that no step-by-step order can produce</h2>
+    <p>Two shared variables start at <code>X = Y = 0</code>. The two threads run at the same time:</p>
+    <div class="cols">
+      <div class="cmd"><span>thread A:   X = 1;   r1 = Y;</span></div>
+      <div class="cmd"><span>thread B:   Y = 1;   r2 = X;</span></div>
+    </div>
+    <p><b>Try it the old way.</b> In every one-step-at-a-time interleaving, one of the two stores happens first, so at least one thread must see a 1. <code>(r1, r2) = (0, 0)</code> looks impossible. The program repeats the test a million times and counts every outcome.</p>
+    <div class="sbgrid" id="sb"></div>
+    <h3>How a real core produces (0, 0): step through it</h3>
+    <p class="small muted">Each core has a <b>store buffer</b>: a small private queue where its writes wait before they reach shared memory. The core reading its own writes sees them right away. Other cores don't see them until the buffer drains.</p>
+    <div class="machine">
+      <div class="core"><h4 style="color:var(--t1)">Core of thread A</h4><div class="prog" id="progA"></div><div class="small muted">store buffer</div><div class="slot" id="sbA"></div><div class="small muted">register r1</div><div class="slot" id="rA"></div></div>
+      <div class="memory"><h4>Shared memory (caches)</h4><div class="slot" id="memX"></div><div class="slot" id="memY"></div></div>
+      <div class="core"><h4 style="color:var(--t2)">Core of thread B</h4><div class="prog" id="progB"></div><div class="small muted">store buffer</div><div class="slot" id="sbB"></div><div class="small muted">register r2</div><div class="slot" id="rB"></div></div>
+    </div>
+    <div class="row"><button class="btn" id="sbBack">◀ Back</button><button class="btn pri" id="sbNext">Next ▶</button><span class="small muted" id="sbStepNo"></span></div>
+    <p class="step-text" id="sbText" style="margin-top:8px"></p>
+    <div id="sbStory"></div>
+  </div>
+
+  <!-- ===== SUMMARY ===== -->
+  <div class="panel">
+    <h2>The picture to keep</h2>
+    <div class="cols" id="summary"></div>
+    <p class="small muted" style="margin-top:10px">"Observed" means it happened in the data you loaded. A "may" item that didn't show up wasn't proven impossible: it just didn't happen in this run. A "may not" item is guaranteed by POSIX or by the CPU's rules. If you ever observe one, there's a bug.</p>
+    <h3>Sources</h3>
+    <ul class="small">
+      <li><a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_create.html" target="_blank" rel="noopener">POSIX.1-2024 · pthread_create()</a>: the new thread's ID need not be stored before the thread starts executing.</li>
+      <li><a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_mutex_lock.html" target="_blank" rel="noopener">POSIX.1-2024 · pthread_mutex_lock()</a> and <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap04.html" target="_blank" rel="noopener">Base Definitions ch. 4 (Memory Synchronization)</a>: applications must synchronize access to shared memory.</li>
+      <li><a href="https://learn.microsoft.com/en-us/windows/win32/procthread/multiple-processors" target="_blank" rel="noopener">Microsoft Learn · Multiple Processors</a>: on SMP any thread can run on any processor, and affinity restricts that.</li>
+      <li><a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" target="_blank" rel="noopener">Intel 64 and IA-32 SDM, Vol. 3, "Memory Ordering"</a>: loads may be reordered with older stores to different locations. AMD's APM Vol. 2 states the same rule for AMD64.</li>
+      <li><a href="https://preshing.com/20120515/memory-reordering-caught-in-the-act" target="_blank" rel="noopener">Jeff Preshing · Memory Reordering Caught in the Act</a>: the classic version of experiment 3, first run on Cygwin.</li>
+    </ul>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script type="text/plain" id="csrc">
+/*
+ * ryzen_lab.c - three small experiments that show what POSIX threads
+ * MAY and MAY NOT do on a real multi-core machine.
+ *
+ *   1. TIMELINE  Where and when do threads actually run?
+ *                (free on all CPUs, then pinned to ONE CPU)
+ *   2. RACE      count++ from two threads: without a mutex, with a mutex,
+ *                and without a mutex but on one CPU.
+ *   3. SB        "Store buffering" litmus test: an outcome that NO
+ *                one-step-at-a-time interleaving can explain.
+ *
+ * Language: C90 + GNU extensions (gnu90). Uses POSIX threads plus three
+ * GNU/Linux extensions that Cygwin also provides: sched_getcpu(),
+ * sched_getaffinity()/sched_setaffinity() and the CPU_SET macros.
+ *
+ * Build (Cygwin 3.6 or Linux):
+ *   gcc -std=gnu90 -O2 -Wall -Wextra -pedantic -pthread ryzen_lab.c -o lab
+ * Run:
+ *   ./lab > out.txt              (defaults)
+ *   ./lab 5000000 2000000 > out.txt   (race N, store-buffer iterations)
+ * Then load out.txt into docs/thread-ryzen.html.
+ *
+ * WARNING: experiments 2 and 3 contain DELIBERATE data races. POSIX says an
+ * application shall not do this, and in C11 terms it is undefined behaviour.
+ * We do it on purpose, with volatile and compiler barriers so the compiler
+ * emits exactly the loads and stores we wrote, to watch what the hardware
+ * does. Never write production code like this.
+ */
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <sched.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+#define MAX_WORKERS  8
+#define MAX_SEGS     4096
+#define GAP_US       50.0      /* a pause longer than this = "was taken off the CPU" */
+
+/* Compiler barrier: the compiler may not move memory accesses across it.
+   It emits no instruction, so the CPU itself is still free to reorder. */
+#define COMPILER_BARRIER() __asm__ __volatile__("" ::: "memory")
+/* Full hardware barrier (MFENCE on x86): also stops the CPU reordering. */
+#define FULL_BARRIER()     __sync_synchronize()
+
+static double g_t0;            /* time zero of the current experiment */
+
+static double now_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1e6 + (double)ts.tv_nsec / 1e3;
+}
+
+static double rel(double t) { return t - g_t0; }
+
+/* ---------------- CPU affinity helpers ---------------- */
+
+static cpu_set_t g_saved_mask;
+static int g_pinned = 0;       /* 1 while the process is pinned to one CPU */
+
+/* Pin the calling thread (and every thread it creates afterwards) to one
+   CPU: the highest-numbered CPU we are currently allowed to use. */
+static int pin_to_one_cpu(void)
+{
+    cpu_set_t one;
+    int cpu, chosen = -1;
+
+    if (sched_getaffinity(0, sizeof g_saved_mask, &g_saved_mask) != 0)
+        return -1;
+    for (cpu = 0; cpu < CPU_SETSIZE; cpu++)
+        if (CPU_ISSET(cpu, &g_saved_mask))
+            chosen = cpu;
+    if (chosen < 0)
+        return -1;
+    CPU_ZERO(&one);
+    CPU_SET(chosen, &one);
+    if (sched_setaffinity(0, sizeof one, &one) != 0)
+        return -1;
+    g_pinned = 1;
+    return chosen;
+}
+
+static void unpin(void)
+{
+    sched_setaffinity(0, sizeof g_saved_mask, &g_saved_mask);
+    g_pinned = 0;
+}
+
+/* Busy-wait politely: when everyone shares one CPU, spinning without
+   yielding would just burn our whole time slice. */
+static void spin_pause(unsigned long *spins)
+{
+    (*spins)++;
+    if (g_pinned || (*spins & 1023UL) == 0)
+        sched_yield();
+}
+
+/* =====================================================================
+ * 1. TIMELINE
+ * Each worker runs for a fixed wall-clock window and keeps asking
+ * "which CPU am I on, and what time is it?". A new segment starts when
+ * the CPU changes or when time jumps by more than GAP_US (the thread
+ * was not running in between).
+ * ===================================================================== */
+
+struct seg { double a, b; int cpu; };
+
+struct tl_worker {
+    int id;
+    pthread_t tid;
+    double t_create_call, t_create_ret;   /* recorded by main */
+    double t_start, t_end;                /* recorded by the worker itself */
+    int nseg;
+    struct seg segs[MAX_SEGS];
+};
+
+static struct tl_worker g_w[MAX_WORKERS];
+static double g_deadline;
+
+static void *tl_worker_fn(void *arg)
+{
+    struct tl_worker *w = (struct tl_worker *)arg;
+    double t, last, a;
+    int cpu, cur;
+    volatile unsigned long work = 0;
+
+    w->t_start = now_us();                /* first thing the thread does */
+    cur = sched_getcpu();
+    a = last = w->t_start;
+    w->nseg = 0;
+
+    while ((t = now_us()) < g_deadline) {
+        cpu = sched_getcpu();
+        if (cpu != cur || t - last > GAP_US) {
+            if (w->nseg < MAX_SEGS) {
+                w->segs[w->nseg].a = a;
+                w->segs[w->nseg].b = last;
+                w->segs[w->nseg].cpu = cur;
+                w->nseg++;
+            }
+            a = t;
+            cur = cpu;
+        }
+        last = t;
+        work++;                           /* pretend to do something */
+    }
+    if (w->nseg < MAX_SEGS) {
+        w->segs[w->nseg].a = a;
+        w->segs[w->nseg].b = last;
+        w->segs[w->nseg].cpu = cur;
+        w->nseg++;
+    }
+    w->t_end = now_us();
+    return NULL;
+}
+
+static void timeline(const char *name, int nworkers, double window_ms, int pin)
+{
+    int i, k, pinned_cpu = -1;
+    double tj0, tj1;
+
+    if (pin) {
+        pinned_cpu = pin_to_one_cpu();
+        if (pinned_cpu < 0) {
+            printf("WARN %s could not pin to one CPU, skipped\n", name);
+            return;
+        }
+    }
+    g_t0 = now_us();
+    g_deadline = g_t0 + window_ms * 1000.0;
+
+    for (i = 0; i < nworkers; i++) {
+        g_w[i].id = i + 1;
+        g_w[i].t_create_call = now_us();
+        if (pthread_create(&g_w[i].tid, NULL, tl_worker_fn, &g_w[i]) != 0) {
+            printf("WARN pthread_create failed\n");
+            nworkers = i;
+            break;
+        }
+        g_w[i].t_create_ret = now_us();
+    }
+
+    printf("TLHEAD %s workers=%d window_ms=%.0f pinned_cpu=%d main_cpu=%d\n",
+           name, nworkers, window_ms, pinned_cpu, sched_getcpu());
+
+    for (i = 0; i < nworkers; i++) {
+        tj0 = now_us();
+        pthread_join(g_w[i].tid, NULL);
+        tj1 = now_us();
+        printf("TL %s main create %d %.1f %.1f\n", name, g_w[i].id,
+               rel(g_w[i].t_create_call), rel(g_w[i].t_create_ret));
+        printf("TL %s main join %d %.1f %.1f\n", name, g_w[i].id, rel(tj0), rel(tj1));
+    }
+    for (i = 0; i < nworkers; i++) {
+        printf("TL %s t%d start %.1f\n", name, g_w[i].id, rel(g_w[i].t_start));
+        for (k = 0; k < g_w[i].nseg; k++)
+            printf("TL %s t%d run %.1f %.1f %d\n", name, g_w[i].id,
+                   rel(g_w[i].segs[k].a), rel(g_w[i].segs[k].b), g_w[i].segs[k].cpu);
+        printf("TL %s t%d end %.1f\n", name, g_w[i].id, rel(g_w[i].t_end));
+    }
+    if (pin)
+        unpin();
+}
+
+/* =====================================================================
+ * 2. RACE
+ * Two threads each add 1 to a shared counter N times. Expected: 2*N.
+ * ===================================================================== */
+
+static volatile unsigned long g_count;     /* racy counter */
+static unsigned long g_safe;               /* mutex-protected counter */
+static pthread_mutex_t g_mx = PTHREAD_MUTEX_INITIALIZER;
+static volatile int g_gate;                /* start both threads together */
+static unsigned long g_n;
+
+static void wait_gate(void)
+{
+    unsigned long spins = 0;
+    while (!g_gate)
+        spin_pause(&spins);
+}
+
+static void *race_plain_fn(void *arg)
+{
+    unsigned long i;
+    (void)arg;
+    wait_gate();
+    for (i = 0; i < g_n; i++)
+        g_count++;          /* load, add, store: NOT atomic, NOT protected */
+    return NULL;
+}
+
+static void *race_mutex_fn(void *arg)
+{
+    unsigned long i;
+    (void)arg;
+    wait_gate();
+    for (i = 0; i < g_n; i++) {
+        pthread_mutex_lock(&g_mx);
+        g_safe++;
+        pthread_mutex_unlock(&g_mx);
+    }
+    return NULL;
+}
+
+static void race(const char *variant, void *(*fn)(void *), unsigned long n,
+                 int runs, int pin)
+{
+    pthread_t a, b;
+    int r;
+    double t0, t1;
+    unsigned long result;
+
+    if (pin && pin_to_one_cpu() < 0) {
+        printf("WARN %s could not pin, skipped\n", variant);
+        return;
+    }
+    for (r = 1; r <= runs; r++) {
+        g_count = 0;
+        g_safe = 0;
+        g_gate = 0;
+        g_n = n;
+        pthread_create(&a, NULL, fn, NULL);
+        pthread_create(&b, NULL, fn, NULL);
+        t0 = now_us();
+        g_gate = 1;
+        pthread_join(a, NULL);
+        pthread_join(b, NULL);
+        t1 = now_us();
+        result = (fn == race_mutex_fn) ? g_safe : g_count;
+        printf("RACE %s %d %lu %lu %lu %.0f\n", variant, r, n, result, 2 * n, t1 - t0);
+        fflush(stdout);
+    }
+    if (pin)
+        unpin();
+}
+
+/* =====================================================================
+ * 3. SB - store buffering
+ *   thread A:  X = 1;  r1 = Y;
+ *   thread B:  Y = 1;  r2 = X;
+ * In ANY one-step-at-a-time interleaving at least one store comes first,
+ * so (r1, r2) = (0, 0) is impossible. Real x86 cores park stores in a
+ * per-core store buffer, so the later load can complete first -> (0, 0).
+ * ===================================================================== */
+
+static volatile int X, Y, R1, R2;
+static volatile unsigned long g_go[2], g_done[2];
+static unsigned long g_iters;
+static int g_fence;
+
+static void *sb_fn(void *arg)
+{
+    int id = *(int *)arg;
+    unsigned long it, spins = 0, seed = 12345UL + (unsigned long)id * 7919UL;
+    volatile unsigned long d;
+    unsigned long delay;
+
+    for (it = 1; it <= g_iters; it++) {
+        while (g_go[id] != it)
+            spin_pause(&spins);
+        FULL_BARRIER();
+        seed = seed * 1103515245UL + 12345UL;   /* tiny random delay so   */
+        delay = (seed >> 16) & 7UL;              /* the two threads overlap */
+        for (d = 0; d < delay; d++)
+            ;
+        if (id == 0) {
+            X = 1;
+            if (g_fence) FULL_BARRIER(); else COMPILER_BARRIER();
+            R1 = Y;
+        } else {
+            Y = 1;
+            if (g_fence) FULL_BARRIER(); else COMPILER_BARRIER();
+            R2 = X;
+        }
+        FULL_BARRIER();
+        g_done[id] = it;
+    }
+    return NULL;
+}
+
+static void sb(const char *variant, unsigned long iters, int fence, int pin)
+{
+    pthread_t a, b;
+    static int ida = 0, idb = 1;
+    unsigned long it, spins = 0, c[4];
+    double t0, t1;
+
+    if (pin && pin_to_one_cpu() < 0) {
+        printf("WARN %s could not pin, skipped\n", variant);
+        return;
+    }
+    c[0] = c[1] = c[2] = c[3] = 0;
+    g_iters = iters;
+    g_fence = fence;
+    g_go[0] = g_go[1] = g_done[0] = g_done[1] = 0;
+    pthread_create(&a, NULL, sb_fn, &ida);
+    pthread_create(&b, NULL, sb_fn, &idb);
+    t0 = now_us();
+    for (it = 1; it <= iters; it++) {
+        X = 0;
+        Y = 0;
+        FULL_BARRIER();
+        g_go[0] = it;
+        g_go[1] = it;
+        while (g_done[0] != it || g_done[1] != it)
+            spin_pause(&spins);
+        FULL_BARRIER();
+        c[R1 * 2 + R2]++;
+    }
+    t1 = now_us();
+    pthread_join(a, NULL);
+    pthread_join(b, NULL);
+    /* counts of (r1,r2) = (0,0) (0,1) (1,0) (1,1) */
+    printf("SB %s %lu %lu %lu %lu %lu %.0f\n", variant, iters,
+           c[0], c[1], c[2], c[3], t1 - t0);
+    fflush(stdout);
+    if (pin)
+        unpin();
+}
+
+/* ===================================================================== */
+
+int main(int argc, char **argv)
+{
+    unsigned long race_n = 2000000UL, sb_n = 1000000UL;
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+
+    if (argc > 1) race_n = strtoul(argv[1], NULL, 10);
+    if (argc > 2) sb_n = strtoul(argv[2], NULL, 10);
+
+#ifdef __CYGWIN__
+    printf("INFO platform=cygwin");
+#else
+    printf("INFO platform=other");
+#endif
+    printf(" cpus=%ld gcc=%d.%d race_n=%lu sb_n=%lu\n",
+           ncpu, __GNUC__, __GNUC_MINOR__, race_n, sb_n);
+    fflush(stdout);
+
+    timeline("free", 4, 20.0, 0);
+    timeline("pin1", 4, 200.0, 1);
+
+    race("plain-free", race_plain_fn, race_n, 5, 0);
+    race("mutex-free", race_mutex_fn, race_n / 4, 3, 0);
+    race("plain-pin1", race_plain_fn, race_n * 10, 5, 1);
+
+    sb("plain-free", sb_n, 0, 0);
+    sb("fence-free", sb_n, 1, 0);
+    sb("plain-pin1", sb_n / 20, 0, 1);
+
+    printf("DONE\n");
+    return 0;
+}
+</script>
+<script type="text/plain" id="sample">
+INFO platform=other cpus=2 gcc=13.3 race_n=2000000 sb_n=1000000
+TLHEAD free workers=4 window_ms=20 pinned_cpu=-1 main_cpu=1
+TL free main create 1 4.0 72.6
+TL free main join 1 1166.3 20174.0
+TL free main create 2 76.6 995.4
+TL free main join 2 20184.6 20185.2
+TL free main create 3 1003.8 1118.5
+TL free main join 3 20187.1 20187.3
+TL free main create 4 1122.5 1158.4
+TL free main join 4 20189.2 20189.4
+TL free t1 start 148.1
+TL free t1 run 148.1 1107.6 0
+TL free t1 run 8819.1 12746.0 0
+TL free t1 end 20106.7
+TL free t2 start 1142.3
+TL free t2 run 1142.3 4745.8 0
+TL free t2 run 12835.2 16745.8 0
+TL free t2 end 20153.3
+TL free t3 start 4856.4
+TL free t3 run 4856.4 5292.5 0
+TL free t3 run 5354.9 8745.7 0
+TL free t3 run 16811.6 20000.0 0
+TL free t3 end 20000.5
+TL free t4 start 1180.2
+TL free t4 run 1180.2 1443.8 1
+TL free t4 run 1500.7 4745.6 1
+TL free t4 run 4891.7 5603.9 1
+TL free t4 run 5654.2 6433.1 1
+TL free t4 run 6694.0 6853.1 1
+TL free t4 run 7078.4 7417.0 1
+TL free t4 run 7492.5 12746.3 1
+TL free t4 run 12961.2 13123.5 1
+TL free t4 run 13254.4 16745.9 1
+TL free t4 run 16864.4 20000.0 1
+TL free t4 end 20000.4
+TLHEAD pin1 workers=4 window_ms=200 pinned_cpu=1 main_cpu=1
+TL pin1 main create 1 0.0 26.1
+TL pin1 main join 1 4644.6 200129.0
+TL pin1 main create 2 26.2 4572.9
+TL pin1 main join 2 200141.5 200198.9
+TL pin1 main create 3 4573.1 4620.9
+TL pin1 main join 3 200202.1 200202.2
+TL pin1 main create 4 4621.2 4638.2
+TL pin1 main join 4 200204.8 200205.2
+TL pin1 t1 start 49.2
+TL pin1 t1 run 49.2 1922.0 1
+TL pin1 t1 run 12563.5 16517.9 1
+TL pin1 t1 run 28599.3 32519.2 1
+TL pin1 t1 run 44620.6 48519.2 1
+TL pin1 t1 run 60572.1 61838.2 1
+TL pin1 t1 run 62042.7 63334.4 1
+TL pin1 t1 run 76574.9 80519.1 1
+TL pin1 t1 run 93720.6 94054.1 1
+TL pin1 t1 run 94108.7 96520.6 1
+TL pin1 t1 run 100592.4 104518.6 1
+TL pin1 t1 run 116582.2 120521.0 1
+TL pin1 t1 run 132609.8 136521.6 1
+TL pin1 t1 run 148613.0 152521.4 1
+TL pin1 t1 run 164582.5 168520.4 1
+TL pin1 t1 run 180591.9 184520.0 1
+TL pin1 t1 run 196587.6 199992.9 1
+TL pin1 t1 end 200002.8
+TL pin1 t2 start 2182.0
+TL pin1 t2 run 2182.0 4518.1 1
+TL pin1 t2 run 16576.7 18940.2 1
+TL pin1 t2 run 19003.0 20055.3 1
+TL pin1 t2 run 20175.2 20214.6 1
+TL pin1 t2 run 20276.4 20518.8 1
+TL pin1 t2 run 32597.7 36519.4 1
+TL pin1 t2 run 48574.9 52405.1 1
+TL pin1 t2 run 64697.3 65830.0 1
+TL pin1 t2 run 65940.6 68518.1 1
+TL pin1 t2 run 80572.6 84517.6 1
+TL pin1 t2 run 96592.8 97031.0 1
+TL pin1 t2 run 97119.0 100520.9 1
+TL pin1 t2 run 112591.1 114052.4 1
+TL pin1 t2 run 114167.7 116519.5 1
+TL pin1 t2 run 128601.6 132520.8 1
+TL pin1 t2 run 144590.5 148520.1 1
+TL pin1 t2 run 160604.2 164520.3 1
+TL pin1 t2 run 176588.5 180520.2 1
+TL pin1 t2 run 192590.6 196519.9 1
+TL pin1 t2 end 200185.4
+TL pin1 t3 start 4654.6
+TL pin1 t3 run 4654.6 8517.9 1
+TL pin1 t3 run 20570.1 24519.3 1
+TL pin1 t3 run 36581.6 39408.4 1
+TL pin1 t3 run 39548.8 40517.3 1
+TL pin1 t3 run 53058.4 55366.4 1
+TL pin1 t3 run 72569.7 73643.2 1
+TL pin1 t3 run 73709.7 74503.6 1
+TL pin1 t3 run 74622.7 75552.9 1
+TL pin1 t3 run 75651.2 76517.6 1
+TL pin1 t3 run 88570.9 92415.2 1
+TL pin1 t3 run 108587.0 112520.6 1
+TL pin1 t3 run 124615.5 128519.5 1
+TL pin1 t3 run 140608.6 144520.5 1
+TL pin1 t3 run 156586.1 160520.1 1
+TL pin1 t3 run 172599.5 176519.4 1
+TL pin1 t3 run 188587.0 192521.1 1
+TL pin1 t3 end 200170.5
+TL pin1 t4 start 8585.7
+TL pin1 t4 run 8585.7 9163.1 1
+TL pin1 t4 run 9235.1 10797.0 1
+TL pin1 t4 run 10854.2 12408.8 1
+TL pin1 t4 run 12459.7 12517.8 1
+TL pin1 t4 run 24584.7 28519.8 1
+TL pin1 t4 run 40569.8 43059.7 1
+TL pin1 t4 run 43114.0 44518.9 1
+TL pin1 t4 run 57193.8 57351.1 1
+TL pin1 t4 run 58632.7 60518.4 1
+TL pin1 t4 run 68587.8 72518.5 1
+TL pin1 t4 run 84548.5 86054.8 1
+TL pin1 t4 run 86114.7 87340.9 1
+TL pin1 t4 run 87422.4 88519.3 1
+TL pin1 t4 run 104607.0 108520.1 1
+TL pin1 t4 run 120592.3 124519.5 1
+TL pin1 t4 run 136599.9 140524.0 1
+TL pin1 t4 run 152623.3 156520.9 1
+TL pin1 t4 run 168611.5 172519.5 1
+TL pin1 t4 run 184581.5 187044.7 1
+TL pin1 t4 run 187109.1 188520.0 1
+TL pin1 t4 end 200150.3
+RACE plain-free 1 2000000 2134344 4000000 5178
+RACE plain-free 2 2000000 2163418 4000000 5097
+RACE plain-free 3 2000000 2125394 4000000 4919
+RACE plain-free 4 2000000 2235883 4000000 5136
+RACE plain-free 5 2000000 2130352 4000000 5133
+RACE mutex-free 1 500000 1000000 1000000 72611
+RACE mutex-free 2 500000 1000000 1000000 63658
+RACE mutex-free 3 500000 1000000 1000000 74422
+RACE plain-pin1 1 20000000 22550547 40000000 63766
+RACE plain-pin1 2 20000000 25059645 40000000 64462
+RACE plain-pin1 3 20000000 24839320 40000000 63062
+RACE plain-pin1 4 20000000 27814683 40000000 63983
+RACE plain-pin1 5 20000000 30025150 40000000 64057
+SB plain-free 1000000 26 482436 517537 1 4376344
+SB fence-free 1000000 0 523095 476859 46 4006054
+SB plain-pin1 50000 0 50000 0 0 163426
+DONE
+</script>
+
+<script>
+"use strict";
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function fmt(n){ return Number(n).toLocaleString('en-US'); }
+function ms(us){ var v=us/1000; return (Math.abs(v)<1? v.toFixed(3): Math.abs(v)<10? v.toFixed(2): v.toFixed(1))+' ms'; }
+var COLORS={main:'var(--main)',t1:'var(--t1)',t2:'var(--t2)',t3:'var(--t3)',t4:'var(--t4)'};
+var tip=$('#tip');
+function showTip(e,html){ tip.innerHTML=html; tip.style.display='block';
+  var x=e.clientX+14, y=e.clientY+14, w=tip.offsetWidth, h=tip.offsetHeight;
+  if(x+w>innerWidth-8) x=e.clientX-w-14; if(y+h>innerHeight-8) y=e.clientY-h-14;
+  tip.style.left=x+'px'; tip.style.top=y+'px'; }
+function hideTip(){ tip.style.display='none'; }
+
+/* ---------- source viewer + download ---------- */
+var SRC=$('#csrc').textContent.replace(/^\n/,'');
+function hl(line){
+  var e=esc(line);
+  return e.replace(/(\/\*.*?\*\/|\/\*.*$|^\s*\*.*$|"(?:[^"\\]|\\.)*"|#\s*\w+|\b(?:int|void|return|for|while|if|else|static|struct|double|unsigned|long|char|const|volatile|sizeof)\b|\bpthread_\w+|\bsched_\w+|\b(?:printf|clock_gettime|sysconf|strtoul|fflush)\b|\b[A-Z_]{3,}\b)/g,function(m){
+    if(/^\/\*|^\s*\*/.test(m)) return '<span class="c">'+m+'</span>';
+    if(m.charAt(0)==='"'||m.indexOf('&quot;')===0) return '<span class="s">'+m+'</span>';
+    if(/^(pthread_|sched_|printf|clock_gettime|sysconf|strtoul|fflush)/.test(m)) return '<span class="f">'+m+'</span>';
+    if(/^[A-Z_]{3,}$/.test(m)) return '<span class="f">'+m+'</span>';
+    return '<span class="k">'+m+'</span>';
+  });
+}
+$('#code').innerHTML=SRC.split('\n').map(function(l,i){ return '<div class="ln"><span class="no">'+(i+1)+'</span><span>'+(hl(l)||' ')+'</span></div>'; }).join('');
+$('#dl').onclick=function(){
+  var b=new Blob([SRC.replace(/\r?\n/g,'\n')],{type:'text/plain'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(b); a.download='ryzen_lab.c'; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500);
+};
+function copyText(t,btn){
+  var done=function(){ var o=btn.textContent; btn.textContent='copied'; setTimeout(function(){btn.textContent=o;},1200); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done,function(){ fallback(); }); } else fallback();
+  function fallback(){ var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); done(); }
+}
+$('#copySrc').onclick=function(){ copyText(SRC,this); };
+$$('[data-copy]').forEach(function(b){ b.onclick=function(){ copyText(b.previousElementSibling.textContent,b); }; });
+
+/* ---------- parser ---------- */
+function parse(text){
+  var D={info:{},tl:{},race:[],sb:{},warn:[],done:false};
+  text.replace(/\r/g,'').split('\n').forEach(function(line){
+    var p=line.trim().split(/\s+/); if(!p[0]) return;
+    var k=p[0];
+    if(k==='INFO'){ p.slice(1).forEach(function(kv){ var i=kv.indexOf('='); if(i>0) D.info[kv.slice(0,i)]=kv.slice(i+1); }); }
+    else if(k==='TLHEAD'){ var h={name:p[1]}; p.slice(2).forEach(function(kv){ var i=kv.indexOf('='); h[kv.slice(0,i)]=Number(kv.slice(i+1)); });
+      D.tl[p[1]]={head:h,threads:{},creates:[],joins:[]}; }
+    else if(k==='TL'){ var s=D.tl[p[1]]; if(!s) s=D.tl[p[1]]={head:{name:p[1]},threads:{},creates:[],joins:[]};
+      if(p[2]==='main'){ var ev={id:Number(p[4]),a:Number(p[5]),b:Number(p[6])}; (p[3]==='create'?s.creates:s.joins).push(ev); }
+      else { var t=s.threads[p[2]]||(s.threads[p[2]]={id:p[2],segs:[],start:null,end:null});
+        if(p[3]==='start') t.start=Number(p[4]); else if(p[3]==='end') t.end=Number(p[4]);
+        else if(p[3]==='run') t.segs.push({a:Number(p[4]),b:Number(p[5]),cpu:Number(p[6])}); } }
+    else if(k==='RACE'){ D.race.push({variant:p[1],run:Number(p[2]),n:Number(p[3]),result:Number(p[4]),expected:Number(p[5]),us:Number(p[6])}); }
+    else if(k==='SB'){ D.sb[p[1]]={iters:Number(p[2]),c:[Number(p[3]),Number(p[4]),Number(p[5]),Number(p[6])],us:Number(p[7])}; }
+    else if(k==='WARN'){ D.warn.push(line); }
+    else if(k==='DONE'){ D.done=true; }
+  });
+  return D;
+}
+
+var D=null, isSample=true, scn='free', zoom='all';
+
+function load(text,sample,label){
+  var d=parse(text);
+  if(!d.info.cpus || !Object.keys(d.tl).length){ $('#srcBanner').className='banner err'; $('#srcBanner').textContent='That doesn\'t look like ryzen_lab output: no INFO/TL lines found. Paste the whole out.txt.'; return; }
+  D=d; isSample=sample;
+  var b=$('#srcBanner');
+  if(sample){ b.className='banner sample'; b.innerHTML='You\'re looking at <b>SAMPLE data from Claude\'s cloud Linux VM with only '+esc(d.info.cpus)+' CPUs</b>. Load your own out.txt to see your Ryzen. With 32 logical CPUs it will look different, and that difference is the lesson.'; }
+  else { b.className='banner real'; b.innerHTML='Showing <b>your</b> results'+(label?' from '+esc(label):'')+'.'+(d.done?'':' <b>Warning:</b> no DONE line, so the output may be cut short.')+(d.warn.length?' '+esc(d.warn.join(' · ')):''); }
+  $('#info').innerHTML=['platform='+d.info.platform,'logical CPUs='+d.info.cpus,'gcc '+d.info.gcc].map(function(s){return '<span class="badge">'+esc(s)+'</span>';}).join('');
+  renderAll();
+}
+$('#useSample').onclick=function(){ load($('#sample').textContent,true); };
+$('#loadPaste').onclick=function(){ load($('#paste').value,false,'pasted text'); };
+$('#file').onchange=function(e){ var f=e.target.files[0]; if(!f) return; var r=new FileReader();
+  r.onload=function(){ $('#paste').value=r.result; load(r.result,false,f.name); }; r.readAsText(f); };
+
+function renderAll(){ renderTimeline(); renderRace(); renderSB(); renderSummary(); }
+
+/* ---------- experiment 1 ---------- */
+$$('[data-scn]').forEach(function(b){ b.onclick=function(){ scn=b.dataset.scn; $$('[data-scn]').forEach(function(x){x.classList.toggle('on',x===b);}); renderTimeline(); }; });
+$$('[data-zoom]').forEach(function(b){ b.onclick=function(){ zoom=b.dataset.zoom; $$('[data-zoom]').forEach(function(x){x.classList.toggle('on',x===b);}); renderTimeline(); }; });
+
+function sweep(S){ /* max number of threads running simultaneously */
+  var ev=[];
+  Object.keys(S.threads).forEach(function(k){ S.threads[k].segs.forEach(function(s){ if(s.b>s.a){ ev.push([s.a,1]); ev.push([s.b,-1]); } }); });
+  ev.sort(function(x,y){ return x[0]-y[0] || x[1]-y[1]; });
+  var cur=0,mx=0; ev.forEach(function(e){ cur+=e[1]; if(cur>mx) mx=cur; }); return mx;
+}
+function runningAt(S,t){
+  var out=[]; Object.keys(S.threads).forEach(function(k){ S.threads[k].segs.forEach(function(s){ if(t>=s.a&&t<=s.b) out.push({id:k,cpu:s.cpu}); }); }); return out;
+}
+function niceStep(range,target){ var raw=range/target, p=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10)), m=raw/p; return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p; }
+
+function renderTimeline(){
+  var S=D.tl[scn]; var host=$('#tl');
+  if(!S){ host.innerHTML='<div style="padding:12px" class="muted">No data for this scenario.</div>'; $('#tlStats').innerHTML=''; $('#tlStory').innerHTML=''; return; }
+  var ids=Object.keys(S.threads).sort();
+  var tmax=0, starts=[];
+  ids.forEach(function(k){ var t=S.threads[k]; if(t.end>tmax) tmax=t.end; t.segs.forEach(function(s){ if(s.b>tmax) tmax=s.b; }); if(t.start!=null) starts.push(t.start); });
+  S.joins.forEach(function(j){ if(j.b>tmax) tmax=j.b; });
+  var x0=0, x1=tmax*1.01;
+  if(zoom==='birth'){ var last=Math.max.apply(null,starts.concat(S.creates.map(function(c){return c.b;}))); x1=Math.max(last*1.6, last+30); }
+  var X=function(t){ return (t-x0)/(x1-x0)*100; };
+  var step=niceStep(x1-x0,8), ticks=[]; for(var t=0;t<=x1;t+=step) ticks.push(t);
+  var grid=ticks.map(function(t){ return '<div class="gridline" style="left:'+X(t)+'%"></div>'; }).join('');
+  function clip(a,b){ return {l:Math.max(0,X(a)), w:Math.max(0,Math.min(100,X(b))-Math.max(0,X(a)))}; }
+
+  var rows='';
+  // main lane
+  var mainHtml=grid;
+  S.creates.forEach(function(c){ var r=clip(c.a,c.b);
+    mainHtml+='<div class="mk create" data-tip="'+esc('main: pthread_create() for t'+c.id+'<br>called at '+ms(c.a)+', returned at '+ms(c.b)+'<br>(took '+(c.b-c.a).toFixed(1)+' µs)')+'" style="left:'+r.l+'%;width:'+Math.max(2,r.w)+'px"></div>'; });
+  S.joins.forEach(function(j){ var r=clip(j.a,j.b);
+    if(r.w>0) mainHtml+='<div class="joinw" data-tip="'+esc('main: inside pthread_join(t'+j.id+')<br>'+ms(j.a)+' → '+ms(j.b)+'<br>blocked, not using any CPU')+'" style="left:'+r.l+'%;width:'+r.w+'%;height:14px;top:16px;border-top:3px dotted var(--mute)"></div>'; });
+  rows+='<div class="tlrow"><div class="tlname"><b><i style="background:var(--main)"></i>main</b><span>creates, then joins</span></div><div class="track">'+mainHtml+'</div></div>';
+  ids.forEach(function(k){
+    var T=S.threads[k], h=grid, c=S.creates.filter(function(cc){ return 't'+cc.id===k; })[0];
+    T.segs.forEach(function(s){ var r=clip(s.a,s.b); if(r.w<=0&&!(X(s.a)>=0&&X(s.a)<=100)) return;
+      h+='<div class="seg" style="--tc:'+COLORS[k]+';left:'+r.l+'%;width:'+r.w+'%" data-tip="'+esc(k+' was executing on <b>CPU '+s.cpu+'</b><br>'+ms(s.a)+' → '+ms(s.b)+' ('+ms(s.b-s.a)+')')+'">'+(r.w>4?'CPU '+s.cpu:'')+'</div>'; });
+    if(T.start!=null&&X(T.start)<=100){
+      var before=c&&T.start<c.b;
+      h+='<div class="mk start" style="left:'+X(T.start)+'%" data-tip="'+esc(k+' executed its first instruction at '+ms(T.start)+(c?'<br>pthread_create() was called at '+ms(c.a)+' and returned at '+ms(c.b)+'<br>'+(before?'<b>It started BEFORE pthread_create() returned to main.</b>':'It started '+(T.start-c.b).toFixed(1)+' µs after pthread_create() returned.'):''))+'"></div>'; }
+    var ncpu={}; T.segs.forEach(function(s){ ncpu[s.cpu]=1; });
+    rows+='<div class="tlrow"><div class="tlname"><b><i style="background:'+COLORS[k]+'"></i>'+k+'</b><span>'+T.segs.length+' stretch'+(T.segs.length===1?'':'es')+' · '+Object.keys(ncpu).length+' CPU'+(Object.keys(ncpu).length===1?'':'s')+'</span></div><div class="track">'+h+'</div></div>';
+  });
+  rows+='<div class="tlrow axis"><div class="tlname"><span>time since start</span></div><div class="track">'+ticks.map(function(t){ return '<div class="tick" style="left:'+X(t)+'%">'+ms(t)+'</div>'; }).join('')+'</div></div>';
+  host.innerHTML=rows+'<div class="cursor" id="cur"></div>';
+
+  // hover: tooltip + crosshair
+  host.onmousemove=function(e){
+    var tg=e.target.closest('[data-tip]'); if(tg) showTip(e,tg.getAttribute('data-tip')); else hideTip();
+    var tr=host.querySelector('.track'), rb=tr.getBoundingClientRect(); var cur=$('#cur');
+    if(e.clientX<rb.left){ cur.style.display='none'; return; }
+    var f=(e.clientX-rb.left)/rb.width, t=x0+f*(x1-x0);
+    cur.style.display='block'; cur.style.left=(e.clientX-host.getBoundingClientRect().left)+'px';
+    var run=runningAt(S,t);
+    $('#readout').innerHTML='At <b>'+ms(t)+'</b>: <b>'+run.length+'</b> thread'+(run.length===1?'':'s')+' running at this exact instant'+(run.length?' — '+run.map(function(r){ return '<span style="color:'+COLORS[r.id]+';font-weight:600">'+r.id+'</span> on CPU '+r.cpu; }).join(', '):'')+'.';
+  };
+  host.onmouseleave=function(){ hideTip(); $('#cur').style.display='none'; };
+
+  // stats
+  var mx=sweep(S), cpus={}, migr=0, early=[], lat=[];
+  ids.forEach(function(k){ var T=S.threads[k]; T.segs.forEach(function(s,i){ cpus[s.cpu]=1; if(i>0&&s.cpu!==T.segs[i-1].cpu) migr++; });
+    var c=S.creates.filter(function(cc){ return 't'+cc.id===k; })[0]; if(c&&T.start!=null){ lat.push(T.start-c.a); if(T.start<c.b) early.push(k); } });
+  var offTotal=0; ids.forEach(function(k){ var T=S.threads[k]; for(var i=1;i<T.segs.length;i++) offTotal+=T.segs[i].a-T.segs[i-1].b; });
+  $('#tlStats').innerHTML=
+    stat(mx,'max threads running at the same instant')+
+    stat(Object.keys(cpus).length,'distinct CPUs used')+
+    stat(migr,'moves to a different CPU')+
+    stat(lat.length?Math.round(Math.min.apply(null,lat))+'–'+Math.round(Math.max.apply(null,lat))+' µs':'–','from pthread_create() call to first instruction')+
+    stat(early.length+' / '+ids.length,'workers that started before pthread_create() returned');
+  S.computed={mx:mx,early:early,migr:migr,cpus:Object.keys(cpus).length};
+
+  var story='';
+  if(scn==='free'){
+    story='<div class="cols" style="margin-top:10px"><div class="may"><b>What this run shows</b><ul>'+
+      (mx>1?'<li><b>'+mx+' threads were executing at the same instant</b> on different CPUs. That\'s parallelism, not taking turns.</li>':'<li>Threads never overlapped in this run.</li>')+
+      (early.length?'<li><b>'+early.join(', ')+' started before pthread_create() had even returned to main.</b> That\'s the APPLICATION USAGE note from the spec, visible in real data.</li>':'<li>Every worker started after pthread_create() returned. That\'s allowed too: the order isn\'t fixed.</li>')+
+      (migr?'<li>The scheduler moved threads between CPUs '+migr+' time'+(migr===1?'':'s')+'. A thread is not tied to a core.</li>':'<li>No thread changed CPU in this short window, but it is allowed to.</li>')+
+      (offTotal>1000?'<li>Threads were off the CPU for '+ms(offTotal)+' in total, because there were more runnable threads than free CPUs. <b>Gaps = concurrency without parallelism.</b></li>':'')+
+      '</ul></div><div class="maynot"><b>What this run does NOT tell you</b><ul><li>Which CPU a thread will use next time, or which worker starts first. Re-run <code>./lab</code> and both change.</li><li>That threads always overlap: with more threads than CPUs, some must wait.</li></ul></div></div>';
+  } else {
+    story='<div class="cols" style="margin-top:10px"><div class="may"><b>What this run shows</b><ul>'+
+      '<li>All threads were forced onto <b>CPU '+esc(S.head.pinned_cpu)+'</b> with <code>sched_setaffinity()</code>. They now <b>take turns</b>: each runs for a time slice, then the scheduler switches.</li>'+
+      '<li>Every worker is still <b>concurrent</b>: all 4 make progress during the window. That\'s concurrency without parallelism.</li>'+
+      '</ul></div><div class="maynot"><b>What can never happen here</b><ul><li><b>Two threads running at the same instant.</b> One CPU executes one thread at a time. Measured maximum: <b>'+mx+'</b>'+(mx<=1?' ✓':' (a value above 1 means timer noise at slice boundaries)')+'.</li><li>Fair, predictable slices. Slice length and order are the scheduler\'s choice: on Windows a slice is typically tens of ms, on Linux a few ms.</li></ul></div></div>';
+  }
+  $('#tlStory').innerHTML=story;
+}
+function stat(v,l){ return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>'; }
+
+/* ---------- experiment 2 ---------- */
+var RACE_META={
+  'plain-free':{t:'No mutex · all CPUs',c:'var(--t2)'},
+  'mutex-free':{t:'With mutex · all CPUs',c:'var(--t1)'},
+  'plain-pin1':{t:'No mutex · ONE CPU',c:'var(--t3)'}
+};
+function renderRace(){
+  var host=$('#bars'), html='', groups={};
+  D.race.forEach(function(r){ (groups[r.variant]=groups[r.variant]||[]).push(r); });
+  ['plain-free','mutex-free','plain-pin1'].forEach(function(v){ var g=groups[v]; if(!g) return; var m=RACE_META[v];
+    html+='<div class="grp">'+m.t+' <span class="muted small">(N = '+fmt(g[0].n)+' per thread, expected '+fmt(g[0].expected)+')</span></div>';
+    g.forEach(function(r){ var pct=r.result/r.expected*100, lost=r.expected-r.result;
+      html+='<div class="lab">run '+r.run+'</div><div class="bt" data-tip="'+esc(m.t+', run '+r.run+'<br>final count <b>'+fmt(r.result)+'</b> of '+fmt(r.expected)+'<br>'+(lost?'<b>'+fmt(lost)+' increments lost</b> ('+(100-pct).toFixed(1)+'%)':'nothing lost')+'<br>took '+ms(r.us))+'"><div class="fill" style="width:'+Math.min(100,pct)+'%;background:'+m.c+'"></div><div class="exp"></div></div><div class="val">'+pct.toFixed(1)+'%'+(lost?'':' ✓')+'</div>'; });
+  });
+  host.innerHTML=html||'<div class="muted">No RACE lines in this output.</div>';
+  host.onmousemove=function(e){ var tg=e.target.closest('[data-tip]'); if(tg) showTip(e,tg.getAttribute('data-tip')); else hideTip(); };
+  host.onmouseleave=hideTip;
+  function worst(v){ var g=groups[v]||[]; return g.reduce(function(a,r){ return Math.min(a,r.result/r.expected); },1); }
+  function exact(v){ var g=groups[v]||[]; return g.length&&g.every(function(r){ return r.result===r.expected; }); }
+  var pf=groups['plain-free'], pp=groups['plain-pin1'];
+  $('#raceStory').innerHTML='<div class="cols"><div class="may"><b>What happened</b><ul>'+
+    (pf?'<li><b>No mutex, all CPUs:</b> worst run kept only '+(worst('plain-free')*100).toFixed(1)+'% of the increments. Both cores load the same value, both add 1, both store, and one increment vanishes. On real parallel hardware this happens constantly, and the total changes every run.</li>':'')+
+    (groups['mutex-free']?'<li><b>With a mutex:</b> '+(exact('mutex-free')?'every run is exactly right':'<b>a run was wrong, which should be impossible</b>')+'. Only one thread at a time can be between <code>lock</code> and <code>unlock</code>, so load, add and store can\'t interleave. It\'s also much slower, because the threads keep handing the lock back and forth.</li>':'')+
+    (pp?'<li><b>No mutex, ONE CPU:</b> '+(exact('plain-pin1')?'no loss in these runs, but don\'t trust it: see the next point.':'still wrong, worst run '+(worst('plain-pin1')*100).toFixed(1)+'%.')+' Here nothing runs in parallel. A thread gets preempted <i>between</i> its load and its store, the other thread runs a whole time slice of increments, and then the first thread stores its old value + 1 and wipes them out. Fewer accidents, but each one is huge.</li>':'')+
+    '</ul></div><div class="maynot"><b>The rule this proves</b><ul><li>A data race is <b>not</b> a multi-core problem. It\'s a <b>missing synchronization</b> problem, and one CPU with preemption is enough.</li><li>A correctly used mutex can <b>never</b> produce a wrong total, on 1 CPU or 32.</li><li><code>volatile</code> doesn\'t make <code>count++</code> safe. It only makes the compiler emit every load and store; it doesn\'t make them atomic.</li></ul></div></div>';
+}
+
+/* ---------- experiment 3 ---------- */
+var SB_META={
+  'plain-free':{t:'Plain · all CPUs',d:'store; compiler barrier; load'},
+  'fence-free':{t:'With MFENCE · all CPUs',d:'store; __sync_synchronize(); load'},
+  'plain-pin1':{t:'Plain · ONE CPU',d:'both threads pinned to one CPU'}
+};
+function renderSB(){
+  var host=$('#sb'), html='';
+  ['plain-free','fence-free','plain-pin1'].forEach(function(v){ var s=D.sb[v]; if(!s) return; var m=SB_META[v], c=s.c, z=c[0];
+    function cell(i,label,imp){ return '<td class="'+(imp?'imp'+(z===0?' zero':''):'')+'">'+fmt(c[i])+'<div class="small muted">'+label+'</div></td>'; }
+    html+='<div class="sbcard"><b>'+m.t+'</b><div class="small muted">'+m.d+' · '+fmt(s.iters)+' tries</div>'+
+      '<table style="margin-top:6px"><tr><th></th><th>r2 = 0</th><th>r2 = 1</th></tr>'+
+      '<tr><th>r1 = 0</th>'+cell(0,'"impossible"',true)+cell(1,'A ran first')+'</tr>'+
+      '<tr><th>r1 = 1</th>'+cell(2,'B ran first')+cell(3,'overlapped')+'</tr></table>'+
+      '<div class="verdict">'+(z>0?'<b style="color:var(--bad)">(0, 0) happened '+fmt(z)+' times</b>, about 1 in '+fmt(Math.round(s.iters/z))+'. No interleaving explains this.':'<b style="color:var(--good)">(0, 0) never happened</b>'+(v==='plain-free'?' in this run. Try more iterations.':'.'))+'</div></div>'; });
+  host.innerHTML=html||'<div class="muted">No SB lines in this output.</div>';
+  var pf=D.sb['plain-free'];
+  $('#sbStory').innerHTML='<div class="cols" style="margin-top:12px"><div class="may"><b>What this means</b><ul>'+
+    '<li>On x86 (Intel and AMD alike), <b>a load may complete before an earlier store to a different address</b> becomes visible to other cores. That\'s the store buffer at work.'+(pf&&pf.c[0]?' Your data caught it '+fmt(pf.c[0])+' times.':'')+'</li>'+
+    '<li>So for racy code, "one step at a time" is <b>not</b> a valid picture. Results can happen that no interleaving allows.</li>'+
+    '</ul></div><div class="maynot"><b>What makes it impossible again</b><ul>'+
+    '<li><b>A full fence</b> (<code>__sync_synchronize()</code>, MFENCE) between the store and the load. The store must reach memory first.</li>'+
+    '<li><b>One CPU:</b> a single core always sees its own operations in program order, even across preemption.</li>'+
+    '<li><b>A mutex</b> around the accesses: <code>pthread_mutex_lock</code>/<code>unlock</code> include the necessary barriers. That\'s why POSIX tells you to synchronize, and why the step-by-step picture is valid for correctly synchronized code.</li>'+
+    '</ul></div></div>';
+}
+// store-buffer stepper
+var SB_STEPS=[
+  {t:'Start: X = 0 and Y = 0 in memory. Each core has an empty store buffer.',pa:-1,pb:-1,sbA:'',sbB:'',X:0,Y:0,r1:'?',r2:'?',hot:[]},
+  {t:'Core A executes <code>X = 1</code>. The write goes into A\'s <b>store buffer</b>, not to memory yet. Core B can\'t see it.',pa:0,pb:-1,sbA:'X = 1',sbB:'',X:0,Y:0,r1:'?',r2:'?',hot:['sbA']},
+  {t:'Core B executes <code>Y = 1</code>. Same thing: it sits in B\'s store buffer.',pa:0,pb:0,sbA:'X = 1',sbB:'Y = 1',X:0,Y:0,r1:'?',r2:'?',hot:['sbB']},
+  {t:'Core A executes <code>r1 = Y</code>. Y isn\'t in A\'s own buffer, so A reads memory: <b>Y is still 0</b>.',pa:1,pb:0,sbA:'X = 1',sbB:'Y = 1',X:0,Y:0,r1:'0',r2:'?',hot:['rA','memY']},
+  {t:'Core B executes <code>r2 = X</code>. X isn\'t in B\'s buffer, so B reads memory: <b>X is still 0</b>.',pa:1,pb:1,sbA:'X = 1',sbB:'Y = 1',X:0,Y:0,r1:'0',r2:'0',hot:['rB','memX']},
+  {t:'Later, both store buffers drain to memory. X = 1 and Y = 1, but both threads already read 0. Result <b>(r1, r2) = (0, 0)</b>: each core\'s load effectively overtook its own earlier store.',pa:2,pb:2,sbA:'',sbB:'',X:1,Y:1,r1:'0',r2:'0',hot:['memX','memY']},
+  {t:'With <code>__sync_synchronize()</code> (MFENCE) between the store and the load, a core must wait until its store buffer has drained before loading. Then at least one load sees a 1, and (0, 0) becomes impossible again.',pa:2,pb:2,sbA:'',sbB:'',X:1,Y:1,r1:'0 → impossible',r2:'0 → impossible',hot:[]}
+];
+var sbStep=0;
+function renderSBStep(){
+  var s=SB_STEPS[sbStep];
+  function prog(lines,pc){ return lines.map(function(l,i){ return '<div class="'+(i<pc?'done':i===pc?'now':'')+'">'+l+'</div>'; }).join(''); }
+  $('#progA').innerHTML=prog(['X = 1;','r1 = Y;'],s.pa===-1?-1:s.pa); $('#progB').innerHTML=prog(['Y = 1;','r2 = X;'],s.pb===-1?-1:s.pb);
+  if(s.pa>=2) $('#progA').innerHTML=prog(['X = 1;','r1 = Y;'],2); if(s.pb>=2) $('#progB').innerHTML=prog(['Y = 1;','r2 = X;'],2);
+  $('#sbA').textContent=s.sbA||'(empty)'; $('#sbB').textContent=s.sbB||'(empty)';
+  $('#rA').textContent='r1 = '+s.r1; $('#rB').textContent='r2 = '+s.r2;
+  $('#memX').textContent='X = '+s.X; $('#memY').textContent='Y = '+s.Y;
+  ['sbA','sbB','rA','rB','memX','memY'].forEach(function(id){ $('#'+id).classList.toggle('hot',s.hot.indexOf(id)>=0); });
+  $('#sbText').innerHTML=s.t; $('#sbStepNo').textContent='step '+(sbStep+1)+' / '+SB_STEPS.length;
+  $('#sbBack').disabled=sbStep===0; $('#sbNext').disabled=sbStep===SB_STEPS.length-1;
+}
+$('#sbNext').onclick=function(){ if(sbStep<SB_STEPS.length-1){ sbStep++; renderSBStep(); } };
+$('#sbBack').onclick=function(){ if(sbStep>0){ sbStep--; renderSBStep(); } };
+renderSBStep();
+
+/* ---------- summary ---------- */
+function renderSummary(){
+  var F=D.tl.free&&D.tl.free.computed, P=D.tl.pin1;
+  if(!F){ var keep=scn; scn='free'; renderTimeline(); scn=keep; F=D.tl.free&&D.tl.free.computed; renderTimeline(); }
+  var g={}; D.race.forEach(function(r){ (g[r.variant]=g[r.variant]||[]).push(r); });
+  var lostFree=(g['plain-free']||[]).some(function(r){return r.result<r.expected;});
+  var lostPin=(g['plain-pin1']||[]).some(function(r){return r.result<r.expected;});
+  var mutexOk=(g['mutex-free']||[]).every(function(r){return r.result===r.expected;});
+  var sbz=D.sb['plain-free']?D.sb['plain-free'].c[0]:0, fz=D.sb['fence-free']?D.sb['fence-free'].c[0]:0, pz=D.sb['plain-pin1']?D.sb['plain-pin1'].c[0]:0;
+  var pinMx=0; if(P){ pinMx=sweep(P); }
+  function item(ok,txt){ return '<li>'+txt+' <span class="badge" style="border-color:'+(ok?'var(--good)':'var(--line)')+';color:'+(ok?'var(--good)':'var(--mute)')+'">'+(ok?'observed':'not seen this run')+'</span></li>'; }
+  function guard(ok,txt){ return '<li>'+txt+' <span class="badge" style="border-color:'+(ok?'var(--good)':'var(--bad)')+';color:'+(ok?'var(--good)':'var(--bad)')+'">'+(ok?'held ✓':'VIOLATED: bug?')+'</span></li>'; }
+  $('#summary').innerHTML='<div class="may"><b>MAY happen (so never assume otherwise)</b><ul>'+
+    item(F&&F.mx>1,'Threads of one process run at the same instant on different CPUs.')+
+    item(F&&F.early.length>0,'A new thread runs before <code>pthread_create()</code> returns.')+
+    item(F&&F.migr>0,'A thread moves to another CPU mid-run.')+
+    item(P&&pinMx<=1&&P.threads&&Object.keys(P.threads).length>1,'On one CPU, threads still all make progress by taking turns (concurrency without parallelism).')+
+    item(lostFree,'Unsynchronized <code>count++</code> loses updates on multiple cores.')+
+    item(lostPin,'…and also on a single CPU, through preemption.')+
+    item(sbz>0,'Racy code produces results no one-step-at-a-time order can explain.')+
+    '</ul></div><div class="maynot"><b>MAY NOT happen (guaranteed)</b><ul>'+
+    guard(mutexOk,'A mutex-protected counter ends with the wrong total.')+
+    guard(!P||pinMx<=1,'Two threads execute at the same instant on one CPU.')+
+    guard(fz===0,'(0, 0) appears with a full fence between store and load.')+
+    guard(pz===0,'(0, 0) appears when both threads share one CPU.')+
+    '<li>With every shared access protected by a mutex, the step-by-step picture from the previous page is exact: every real run equals some one-step-at-a-time order.</li>'+
+    '</ul></div>';
+}
+
+load($('#sample').textContent,true);
+</script>
+</body>
+</html>
